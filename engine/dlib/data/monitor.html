@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Realtime monitor</title>
+</head>
+
+<script type="text/javascript" src="profiler.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+
+<script type="text/javascript">
+
+//var base_url = 'http://localhost:8002/';
+var base_url = 'http://172.16.10.49:8002/';
+var request = new XMLHttpRequest();
+var stringTable = {};
+var capturedFrameCount = 0;
+
+function getChunk(url){
+    request.open('GET', base_url + url, true);
+    request.overrideMimeType('text/plain; charset=x-user-defined');
+    request.onreadystatechange = handler;
+    request.send();
+}
+
+function handler(evtXHR){
+    if (request.readyState == 4) {
+        if (request.status == 200) {
+            var d = request.responseText;
+
+            var type = d.substring(0, 4);
+            if (type == "PROF") {
+                capturedFrameCount += 1;
+
+                var prof = loadProfile(d.substring(4), stringTable);
+                for (var i in prof.counters_data) {
+                    var id = i.replace('\.', '_');
+                    var val = parseInt(prof.counters_data[i].value);
+                    //console.log(i, prof.counters_data[i]);
+                    //console.log(id, val);
+                    $('#' + id).css('height', (val * 10) +  'px');
+
+                }
+                console.log(prof.scopes_data);
+                //capturedSamplesData.push(d.substring(4));
+                if (capturedFrameCount < 20) {
+                    getChunk('profile')
+                }
+                else {
+                    console.log("done");
+
+                 /*   for (var i in capturedSamplesData) {
+                        var prof = loadProfile(capturedSamplesData[i], stringTable);
+                       frames.push(prof);
+                    }
+                    captureDone();*/
+                }
+            }
+            else if (type == "STRS") {
+                stringTable = loadStrings(d);
+                getChunk('profile');
+            }
+            else {
+                alert("Unknown chunk type: " + type);
+            }
+        }
+        else {
+            alert("Failed to load data");
+        }
+    }
+}
+
+function start()
+{
+    request.open('GET', base_url + 'strings', true);
+    request.overrideMimeType('text/plain; charset=x-user-defined');
+    request.onreadystatechange = handler;
+    request.send();
+
+    $('#Gui_ActiveAnimations').css('height', '10px');
+}
+
+</script>
+
+<style type="text/css">
+    .bar {
+        width: 60px;
+        height: 100px;
+        background-color: red;
+        float: left;
+        margin-right: 10px;
+        _bottom: -10px;
+        _vertical-align: bottom;
+        bottom: 0;
+        _position: absolute;
+    }
+
+    .barContainer {
+    }
+
+    ul {
+        list-style: none;
+        position: relative;
+        margin: 0px;
+        padding: 0px;
+    }
+
+    li {
+        _position: absolute;
+        display: inline-block;
+        height: 100px;
+        width: 60px;
+        background-color: blue;
+        list-style: none;
+        margin: 0 10px 0 0;
+    }
+
+</style>
+
+<body onload="start();">
+
+<ul>
+    <li id="Gui_ActiveAnimations">
+    <li id="DrawCalls">
+    <li id="Messages">
+
+    <li style="background-color: black; height: 20px;"/>
+    <li/>
+</ul>
+
+<!--
+<div class="barContainer">
+	<div class="bar" style="background-color: blue;"></div>
+	<div class="bar" style="background-color: black; height: 60px"></div>
+	<div class="bar"></div>
+	<div class="bar" style="background-color: blue;"></div>
+</div>
+ -->
+
+</body>
+
+<script>
+
+</script>
+</html>
+
