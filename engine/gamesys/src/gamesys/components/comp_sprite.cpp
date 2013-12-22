@@ -61,7 +61,6 @@ namespace dmGameSystem
         float                       m_AnimTimer;
         uint8_t                     m_ComponentIndex;
         uint8_t                     m_Enabled : 1;
-        uint8_t                     m_PlayBackwards : 1;
         uint8_t                     m_Playing : 1;
         uint8_t                     m_FlipHorizontal : 1;
         uint8_t                     m_FlipVertical : 1;
@@ -145,8 +144,11 @@ namespace dmGameSystem
         {
             component->m_CurrentAnimation = animation_id;
             dmGameSystemDDF::TextureSetAnimation* animation = &texture_set->m_TextureSet->m_Animations[*anim_id];
-            component->m_PlayBackwards = 0;
-            component->m_AnimInvDuration = (float)animation->m_Fps / (animation->m_End - animation->m_Start);
+            uint32_t frame_count = animation->m_End - animation->m_Start;
+            if (animation->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_PINGPONG
+                    || animation->m_Playback == dmGameSystemDDF::PLAYBACK_LOOP_PINGPONG)
+                frame_count = dmMath::Max(1u, frame_count * 2 - 2);
+            component->m_AnimInvDuration = (float)animation->m_Fps / frame_count;
             component->m_AnimTimer = 0.0f;
             component->m_Playing = animation->m_Playback != dmGameSystemDDF::PLAYBACK_NONE;
         }
@@ -269,13 +271,21 @@ namespace dmGameSystem
     static uint32_t GetCurrentTile(const SpriteComponent* component, const dmGameSystemDDF::TextureSetAnimation* anim_ddf)
     {
         float t = component->m_AnimTimer;
-        bool backwards = component->m_PlayBackwards
-                || anim_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_BACKWARD
+        bool backwards = anim_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_BACKWARD
                 || anim_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_LOOP_BACKWARD;
         if (backwards)
             t = 1.0f - t;
-        uint32_t frame_count = anim_ddf->m_End - anim_ddf->m_Start;
+        uint32_t interval = anim_ddf->m_End - anim_ddf->m_Start;
+        uint32_t frame_count = interval;
+        if (anim_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_PINGPONG
+                || anim_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_LOOP_PINGPONG)
+        {
+            frame_count = dmMath::Max(1u, frame_count * 2 - 2);
+        }
         uint32_t frame = dmMath::Min(frame_count - 1, (uint32_t)(t * frame_count));
+        if (frame >= interval) {
+            frame = 2 * (interval - 1) - frame;
+        }
         return frame + anim_ddf->m_Start;
     }
 
@@ -535,7 +545,8 @@ namespace dmGameSystem
             dmGameSystemDDF::TextureSetAnimation* animation_ddf = &texture_set_ddf->m_Animations[*anim_id];
 
             bool once = animation_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_FORWARD
-                    || animation_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_BACKWARD;
+                    || animation_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_BACKWARD
+                    || animation_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_ONCE_PINGPONG;
             // Stop once-animation and broadcast animation_done
             if (once && component->m_AnimTimer >= 1.0f)
             {
@@ -546,6 +557,7 @@ namespace dmGameSystem
                     dmGameSystemDDF::AnimationDone message;
                     // Engine has 0-based indices, scripts use 1-based
                     message.m_CurrentTile = GetCurrentTile(component, animation_ddf) - animation_ddf->m_Start + 1;
+                    message.m_Id = component->m_CurrentAnimation;
                     dmMessage::URL receiver;
                     receiver.m_Socket = dmGameObject::GetMessageSocket(dmGameObject::GetCollection(component->m_ListenerInstance));
                     dmMessage::URL sender;
@@ -614,17 +626,12 @@ namespace dmGameSystem
                 {
                     case dmGameSystemDDF::PLAYBACK_ONCE_FORWARD:
                     case dmGameSystemDDF::PLAYBACK_ONCE_BACKWARD:
+                    case dmGameSystemDDF::PLAYBACK_ONCE_PINGPONG:
                         component->m_AnimTimer = 1.0f;
                         break;
                     default:
                         component->m_AnimTimer -= floorf(component->m_AnimTimer);
                         break;
-                }
-                if (animation_ddf->m_Playback == dmGameSystemDDF::PLAYBACK_LOOP_PINGPONG)
-                {
-                    component->m_PlayBackwards = ~component->m_PlayBackwards;
-                    // We have now played the current frame for a whole frame-length, skip it on the way back
-                    component->m_AnimTimer += 1.0f / (animation_ddf->m_End - animation_ddf->m_Start);
                 }
             }
         }

@@ -542,13 +542,14 @@ namespace dmGameObject
 
     dmhash_t GenerateUniqueInstanceId(HCollection collection)
     {
-        const char* id_format = "instance%d";
+        // global path
+        const char* id_format = "%sinstance%d";
         char id_s[16];
         uint32_t index = 0;
         dmMutex::Lock(collection->m_Mutex);
         index = collection->m_GenInstanceCounter++;
         dmMutex::Unlock(collection->m_Mutex);
-        DM_SNPRINTF(id_s, sizeof(id_s), id_format, index);
+        DM_SNPRINTF(id_s, sizeof(id_s), id_format, ID_SEPARATOR, index);
         return dmHashString64(id_s);
     }
 
@@ -612,20 +613,22 @@ namespace dmGameObject
                     {
                         component_instance_data = &instance->m_ComponentInstanceUserData[next_component_instance_data++];
                     }
+                    // TODO use the component type identification system once it has been implemented (related to set_tile for tile maps)
                     if (strcmp(component.m_Type->m_Name, "scriptc") == 0 && component.m_Type->m_SetPropertiesFunction != 0x0)
                     {
                         ComponentSetPropertiesParams params;
                         params.m_Instance = instance;
                         params.m_UserData = component_instance_data;
-                        if (CreatePropertySetUserDataLua(GetLuaState(), property_buffer, property_buffer_size, &params.m_PropertySet.m_UserData))
+                        PropertyResult result = CreatePropertySetUserDataLua(GetLuaState(), property_buffer, property_buffer_size, &params.m_PropertySet.m_UserData);
+                        if (result == PROPERTY_RESULT_OK)
                         {
                             params.m_PropertySet.m_FreeUserDataCallback = DestroyPropertySetUserDataLua;
                             params.m_PropertySet.m_GetPropertyCallback = GetPropertyCallbackLua;
-                            component.m_Type->m_SetPropertiesFunction(params);
+                            result = component.m_Type->m_SetPropertiesFunction(params);
                         }
-                        else
+                        if (result != PROPERTY_RESULT_OK)
                         {
-                            dmLogError("Could not read properties when spawning %s.", prototype_name);
+                            dmLogError("Could not load properties when spawning '%s'.", prototype_name);
                             Delete(collection, instance);
                             return 0;
                         }

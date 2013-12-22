@@ -84,10 +84,13 @@ namespace dmSys
 
     void GetSystemInfo(struct SystemInfo* info)
     {
+        memset(info, 0, sizeof(*info));
+
         UIDevice* d = [UIDevice currentDevice];
         struct utsname uts;
         uname(&uts);
 
+        dmStrlCpy(info->m_Manufacturer, "Apple", sizeof(info->m_Manufacturer));
         dmStrlCpy(info->m_DeviceModel, uts.machine, sizeof(info->m_DeviceModel));
         dmStrlCpy(info->m_SystemName, [d.systemName UTF8String], sizeof(info->m_SystemName));
         dmStrlCpy(info->m_SystemVersion, [d.systemVersion UTF8String], sizeof(info->m_SystemVersion));
@@ -96,6 +99,7 @@ namespace dmSys
         const char* lang = [locale.localeIdentifier UTF8String];
         FillLanguageTerritory(lang, info);
         FillTimeZone(info);
+        dmStrlCpy(info->m_DeviceIdentifier, [[d.identifierForVendor UUIDString] UTF8String], sizeof(info->m_DeviceIdentifier));
     }
 
 #else
