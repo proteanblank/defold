@@ -238,7 +238,7 @@ namespace dmSocket
 #endif
         if (s < 0)
         {
-            return NativeToResult(DM_SOCKET_ERRNO);
+            return NativeToResultCompat(DM_SOCKET_ERRNO);
         }
         else
         {
@@ -262,7 +262,7 @@ namespace dmSocket
 #endif
         if (s < 0)
         {
-            return NativeToResult(DM_SOCKET_ERRNO);
+            return NativeToResultCompat(DM_SOCKET_ERRNO);
         }
         else
         {
@@ -282,7 +282,7 @@ namespace dmSocket
 
         if (r < 0)
         {
-            return NativeToResult(DM_SOCKET_ERRNO);
+            return NativeToResultCompat(DM_SOCKET_ERRNO);
         }
         else
         {
@@ -307,7 +307,7 @@ namespace dmSocket
 
         if (r < 0)
         {
-            return NativeToResult(DM_SOCKET_ERRNO);
+            return NativeToResultCompat(DM_SOCKET_ERRNO);
         }
         else
         {
@@ -522,6 +522,40 @@ namespace dmSocket
     Result SetNoDelay(Socket socket, bool no_delay)
     {
         return SetSockoptBool(socket, IPPROTO_TCP, TCP_NODELAY, no_delay);
+    }
+
+    static Result SetSockoptTime(Socket socket, int level, int name, uint64_t time)
+    {
+#ifdef WIN32
+		DWORD timeval = time / 1000;
+		if (time > 0 && timeval == 0) {
+		    dmLogWarning("Socket timeout requested less than 1ms. Timeout set to 1ms.");
+		    timeval = 1;
+		}
+#else
+        struct timeval timeval;
+        timeval.tv_sec = time / 1000000;
+        timeval.tv_usec = time % 1000000;
+#endif
+        int ret = setsockopt(socket, level, name, (char *) &timeval, sizeof(timeval));
+        if (ret < 0)
+        {
+            return NativeToResult(DM_SOCKET_ERRNO);
+        }
+        else
+        {
+            return RESULT_OK;
+        }
+    }
+
+    Result SetSendTimeout(Socket socket, uint64_t timeout)
+    {
+        return SetSockoptTime(socket, SOL_SOCKET, SO_SNDTIMEO, timeout);
+    }
+
+    Result SetReceiveTimeout(Socket socket, uint64_t timeout)
+    {
+        return SetSockoptTime(socket, SOL_SOCKET, SO_RCVTIMEO, timeout);
     }
 
     Address AddressFromIPString(const char* address)
