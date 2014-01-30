@@ -14,6 +14,13 @@ function capture(base_url, doneFunc) {
         request.open('GET', base_url + url, true);
         request.overrideMimeType('text/plain; charset=x-user-defined');
         request.onreadystatechange = handler;
+        request.onerror = function() {
+            if (runCapture) {
+                setTimeout(function(){
+                    getChunk('strings');
+                    }, 100);
+            }
+        }
         request.send();
     }
 
@@ -45,8 +52,8 @@ function capture(base_url, doneFunc) {
                     alert("Unknown chunk type: " + type);
                 }
             } else {
-                $("#capturing").hide();
-                alert("Failed to load data");
+                //$("#capturing").hide();
+                //alert("Failed to load data");
             }
         }
     }
@@ -239,8 +246,8 @@ function displayStack(profile) {
 
 function startCapture() {
     //var url = 'http://172.16.10.119:8002/';
-    //var url = 'http://localhost:8002/';
-    var url = 'http://192.168.1.2:8002/';
+    var url = 'http://localhost:8002/';
+    //var url = 'http://192.168.1.2:8002/';
     //var url = 'http://192.168.2.6:8002/';
     capture(url, function(profile) {
         displayStack(profile);
