@@ -460,6 +460,8 @@ static Result LoadFromArchive(HFactory factory, dmResourceArchive::HArchive arch
 
 static Result LoadResource(HFactory factory, const char* path, const char* original_name, uint32_t* resource_size)
 {
+    DM_PROFILE2(Resource, "Load", dmProfile::Internalize(original_name));
+
     if (factory->m_BuiltinsArchive)
     {
         if (LoadFromArchive(factory, factory->m_BuiltinsArchive, path, original_name, resource_size) == RESULT_OK)
@@ -548,7 +550,7 @@ Result DoGet(HFactory factory, const char* name, void** resource)
     assert(name);
     assert(resource);
 
-    DM_PROFILE(Resource, "Get");
+    DM_PROFILE2(Resource, "Get", dmProfile::Internalize(name));
 
     *resource = 0;
 
@@ -628,7 +630,11 @@ Result DoGet(HFactory factory, const char* name, void** resource)
         tmp_resource.m_ReferenceCount = 1;
         tmp_resource.m_ResourceType = (void*) resource_type;
 
-        Result create_error = resource_type->m_CreateFunction(factory, resource_type->m_Context, factory->m_StreamBuffer, file_size, &tmp_resource, name);
+        Result create_error;
+        {
+            DM_PROFILE2(Resource, "Create", dmProfile::Internalize(name));
+            create_error = resource_type->m_CreateFunction(factory, resource_type->m_Context, factory->m_StreamBuffer, file_size, &tmp_resource, name);
+        }
 
         if (create_error == RESULT_OK)
         {

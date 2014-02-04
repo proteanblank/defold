@@ -27,6 +27,7 @@
 var profiler = (function() {
     var module = {};
     var ticksPerSecond = 1000.0; // NOTE: We use ms internally
+    var runCapture = false;
 
     readUInt32 = function(data, offset) {
         var a1 = data.charCodeAt(offset + 3) & 0xff;
@@ -67,19 +68,25 @@ var profiler = (function() {
         for ( var i = 0; i < sampleCount; ++i) {
             var nameID = readUInt32(d, offset + 0);
             var scope = readUInt32(d, offset + 4);
-            var start = readUInt32(d, offset + 8);
-            var elapsed = readUInt32(d, offset + 12);
-            var threadId = readUInt16(d, offset + 16);
+            var arg = readUInt32(d, offset + 8);
+            var start = readUInt32(d, offset + 12);
+            var elapsed = readUInt32(d, offset + 16);
+            var threadId = readUInt16(d, offset + 20);
             var name = table[nameID];
 
             var scopeName = table[scope];
-            offset += 5 * 4;
+            if (name == undefined) {
+                console.log( nameID, name, scope, scopeName );
+
+            }
+            offset += 6 * 4;
 
             frameTime = Math.max(frameTime, elapsed / ticksPerSecond);
 
             var s = {
                 scopeName : scopeName,
                 name : scopeName + "." + name,
+                arg: arg,
                 start : start / ticksPerSecond,
                 elapsed : elapsed / ticksPerSecond
             };
@@ -131,11 +138,14 @@ var profiler = (function() {
             elapsed : s.elapsed,
             name : s.name,
             scopeName : s.scopeName,
+            arg: s.arg,
+            parent: null,
             children : []
         };
     }
 
     function callTreeFrame(samples, start, max) {
+        // TODO: We must check thread
         var s = samples[start];
         var current = newNode(s);
         var nodes = [ current ];
@@ -145,20 +155,27 @@ var profiler = (function() {
             var s = samples[i];
             var end = s.start + s.elapsed;
 
-            // TODO: Correct range? Add depth to samples instead?
-            if (end > max) {
-                // ++i;
-                --i;
-                break;
-            }
             // Avoid floating point comparison error
             // If a child is taken for a sibling scope the total time will be
             // totally wrong
             var epsilon = 0.00001;
+
             // TODO: Correct range? Add depth to samples instead?
+            if ((end - epsilon) > max) {
+                // ++i;
+                --i;
+                break;
+            }
+            // TODO: Correct range? Add depth to samples instead?
+
+//            if ((s.start + epsilon)  >= current.start && (end - epsilon)  <= current.end) {
             if ((end - epsilon) <= current.end) {
                 var ret = callTreeFrame(samples, i, end);
                 i = ret.start;
+                // TODO: Write test for this
+                for (var j in ret.nodes) {
+                    ret.nodes[j].parent = current;
+                }
                 current.children = current.children.concat(ret.nodes);
             } else {
                 current = newNode(s);
@@ -180,6 +197,9 @@ var profiler = (function() {
             calcSelfTime(c);
         }
         node.self = (node.end - node.start) - sum;
+        if (node.self < 0) {
+            debugger;
+        }
     }
 
     function callTree(profile) {
@@ -215,14 +235,87 @@ var profiler = (function() {
             ret.push(c);
             ret = ret.concat(flatten(c));
         }
-        node.children = [];
+        // TODO: This operation is destructive. We children = []
+        //node.children = [];
         return ret;
+    }
+
+    function startCapture(base_url, progressFunc, doneFunc) {
+        var request = new XMLHttpRequest();
+        var capturedFrameCount = 0;
+        var captured = [];
+        var profile = [];
+
+        runCapture = true;
+
+        //$('#captureCount').text('');
+        //$("#capturing").show();
+
+        var getChunk = function(url) {
+            request.open('GET', base_url + url, true);
+            request.overrideMimeType('text/plain; charset=x-user-defined');
+            request.onreadystatechange = handler;
+            request.onerror = function() {
+                if (runCapture) {
+                    setTimeout(function(){
+                        getChunk('profile');
+                    }, 100);
+                }
+            }
+            request.send();
+        }
+
+        var handler = function(evtXHR) {
+            if (request.readyState == 4) {
+                if (request.status == 200) {
+                    var d = request.responseText;
+                    var type = d.substring(0, 4);
+
+                    if (type == "PROF") {
+                        capturedFrameCount += 1;
+                        captured.push(d);
+
+                        if (capturedFrameCount % 10 == 0) {
+                            progressFunc(capturedFrameCount);
+                            // TODO: Callback for this
+                            // $('#captureCount').text(capturedFrameCount);
+                        }
+                        if (capturedFrameCount < 2500 && runCapture) {
+                            getChunk('profile')
+                        } else {
+                            getChunk('strings');
+                        }
+                    } else if (type == "STRS") {
+                        var stringTable = profiler.loadStrings(d);
+
+                        for (var i = 0; i < captured.length; ++i) {
+                            var prof = profiler.loadProfile(captured[i], stringTable);
+                            profile.push(prof);
+                        }
+
+                        //$("#capturing").hide();
+                        doneFunc(profile, stringTable);
+                    } else {
+                        //$("#capturing").hide();
+                        runCapture = false;
+                        doneFunc(null);
+                    }
+                }
+            }
+        }
+        getChunk('profile');
+    }
+
+    function stopCapture() {
+        runCapture = false;
     }
 
     module.loadStrings = loadStrings;
     module.loadProfile = loadProfile;
     module.callTree = callTree;
     module.flatten = flatten;
+    module.startCapture = startCapture;
+    module.stopCapture = stopCapture;
 
     return module;
 }());

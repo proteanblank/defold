@@ -39,6 +39,31 @@ var testData = {
     }, ],
 };
 
+var testData2 = {
+    samples : [ {
+        start: 504.441,
+        elapsed: 0.56,
+        name: "Resource.Load",
+        scopeName: "Resource",
+    }, {
+        start: 504.479,
+        elapsed: 0.024,
+        name: "DDF.LoadMessage",
+        scopeName: "DDF",
+    }, {
+        start: 504.515,
+        elapsed: 0.472,
+        name: "Resource.Get",
+        scopeName: "Resource",
+    }, {
+        start: 504.523,
+        elapsed: 0.464,
+        name: "Resource.Load",
+        scopeName: "Resource",
+    }, ],
+};
+
+
 function testCallTree() {
 
     var eps = 0.00001;
@@ -59,6 +84,21 @@ function testCallTree() {
     assert(x[0].elapsed == sum);
 }
 
+function testCallTree2() {
+    var eps = 0.00001;
+    var root = profiler.callTree(testData2);
+    var x = root.children;
+
+    assert(x.length == 1);
+
+    assert(x[0].children.length == 2);
+    assert(x[0].children[0].children.length == 0);
+    assert(x[0].children[1].children.length == 1);
+    assert(x[0].children[1].children[0].children.length == 0);
+
+    //console.log(JSON.stringify(root, null, 2));
+}
+
 function testFlatten() {
     var eps = 0.00001;
     var root = profiler.callTree(testData);
@@ -70,4 +110,6 @@ function testFlatten() {
 
 testLoad();
 testCallTree();
+testCallTree2();
 testFlatten();
+console.log("all passed");

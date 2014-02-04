@@ -3,6 +3,7 @@ var runCapture = false;
 function capture(base_url, doneFunc) {
     var request = new XMLHttpRequest();
     var capturedFrameCount = 0;
+    var captured = [];
     var profile = [];
 
     runCapture = true;
@@ -17,7 +18,7 @@ function capture(base_url, doneFunc) {
         request.onerror = function() {
             if (runCapture) {
                 setTimeout(function(){
-                    getChunk('strings');
+                    getChunk('profile');
                     }, 100);
             }
         }
@@ -30,10 +31,10 @@ function capture(base_url, doneFunc) {
                 var d = request.responseText;
 
                 var type = d.substring(0, 4);
+
                 if (type == "PROF") {
                     capturedFrameCount += 1;
-                    var prof = profiler.loadProfile(d, stringTable);
-                    profile.push(prof);
+                    captured.push(d);
 
                     if (capturedFrameCount % 10 == 0) {
                         $('#captureCount').text(capturedFrameCount);
@@ -41,12 +42,18 @@ function capture(base_url, doneFunc) {
                     if (capturedFrameCount < 2500 && runCapture) {
                         getChunk('profile')
                     } else {
-                        $("#capturing").hide();
-                        doneFunc(profile);
+                        getChunk('strings');
                     }
                 } else if (type == "STRS") {
-                    stringTable = profiler.loadStrings(d);
-                    getChunk('profile');
+                    var stringTable = profiler.loadStrings(d);
+
+                    for (var i = 0; i < captured.length; ++i) {
+                        var prof = profiler.loadProfile(captured[i], stringTable);
+                        profile.push(prof);
+                    }
+
+                    $("#capturing").hide();
+                    doneFunc(profile);
                 } else {
                     $("#capturing").hide();
                     alert("Unknown chunk type: " + type);
@@ -57,7 +64,7 @@ function capture(base_url, doneFunc) {
             }
         }
     }
-    getChunk('strings');
+    getChunk('profile');
 }
 
 function displayStack(profile) {
@@ -68,7 +75,9 @@ function displayStack(profile) {
 
     var threshold = 0.1;
     var callTree = profile.map(profiler.callTree);
+    foo = profile.map(profiler.callTree);;
     var topFrames = callTree.map(profiler.flatten);
+    bar = topFrames;
     topFrames = topFrames.map(function(x) {
         return x.filter(function(s) {
             if (skipSync && s.name == "VSync.Wait") {
@@ -247,6 +256,7 @@ function displayStack(profile) {
 function startCapture() {
     //var url = 'http://172.16.10.119:8002/';
     var url = 'http://localhost:8002/';
+    //var url = 'http://10.0.1.6:8002/';
     //var url = 'http://192.168.1.2:8002/';
     //var url = 'http://192.168.2.6:8002/';
     capture(url, function(profile) {

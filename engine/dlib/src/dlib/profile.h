@@ -43,6 +43,7 @@
 
 #ifdef DM_PROFILE_DISABLE
 #define DM_PROFILE(scope_name, name)
+#define DM_PROFILE2(scope_name, name, arg)
 #define DM_COUNTER(name, amount)
 #define DM_COUNTER_HASH(name, amount)
 #else
@@ -52,7 +53,15 @@
     {\
         DM_PROFILE_PASTE2(scope, __LINE__) = dmProfile::AllocateScope(#scope_name);\
     }\
-    dmProfile::ProfileScope DM_PROFILE_PASTE2(profile_scope, __LINE__)(DM_PROFILE_PASTE2(scope, __LINE__), name);\
+    dmProfile::ProfileScope DM_PROFILE_PASTE2(profile_scope, __LINE__)(DM_PROFILE_PASTE2(scope, __LINE__), name, 0); \
+
+#define DM_PROFILE2(scope_name, name, arg)                               \
+    static dmProfile::Scope* DM_PROFILE_PASTE2(scope, __LINE__) = 0; \
+    if (DM_PROFILE_PASTE2(scope, __LINE__) == 0) \
+    {\
+        DM_PROFILE_PASTE2(scope, __LINE__) = dmProfile::AllocateScope(#scope_name);\
+    }\
+    dmProfile::ProfileScope DM_PROFILE_PASTE2(profile_scope, __LINE__)(DM_PROFILE_PASTE2(scope, __LINE__), name, arg); \
 
     #define DM_COUNTER(name, amount) \
     dmProfile::AddCounter(name, amount);
@@ -106,6 +115,8 @@ namespace dmProfile
         const char* m_Name;
         /// Sampled within scope
         Scope*      m_Scope;
+        /// Custom argument
+        const void*       m_Arg;
         /// Start time in ticks
         uint32_t    m_Start;
         /// Elapsed time in ticks
@@ -272,7 +283,7 @@ namespace dmProfile
         uint64_t    m_Start;
         Sample*     m_Sample;
         Scope*      m_Scope;
-        inline ProfileScope(Scope* scope, const char* name)
+        inline ProfileScope(Scope* scope, const char* name, const void* arg)
         {
             if (!g_IsInitialized)
             {
@@ -284,6 +295,7 @@ namespace dmProfile
 
             s->m_Name = name;
             s->m_Scope = scope;
+            s->m_Arg = arg;
             m_Sample = s;
 
 #if defined(_WIN32)

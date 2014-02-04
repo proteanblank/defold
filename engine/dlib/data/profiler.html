@@ -174,13 +174,14 @@
                 for (var i = 0; i < sample_count; ++i) {
                     var name_id = readUInt32(d, offset + 0);
                     var scope = readUInt32(d, offset + 4);
-                    var start = readUInt32(d, offset + 8);
-                    var elapsed = readUInt32(d, offset + 12);
-                    var thread_id = readUInt16(d, offset + 16);
+                    var arg = readUInt32(d, offset + 8);
+                    var start = readUInt32(d, offset + 12);
+                    var elapsed = readUInt32(d, offset + 16);
+                    var thread_id = readUInt16(d, offset + 20);
                     var name = table[name_id];
 
                     var scope_name = table[scope];
-                    offset += 5 * 4;
+                    offset += 6 * 4;
 
                     frameTime = Math.max(frameTime, elapsed / ticksPerSecond);
 

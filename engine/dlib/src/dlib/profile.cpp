@@ -43,6 +43,7 @@ namespace dmProfile
     dmArray<Profile*> g_FreeProfiles;
 
     // Mapping of strings. Use when sending profiling data over HTTP
+    // TODO: We should probably request all strings from memory instead!
     dmHashTable<uintptr_t, const char*> g_StringTable;
     dmStringPool::HPool g_StringPool = 0;
 
@@ -298,6 +299,17 @@ namespace dmProfile
         QueryPerformanceFrequency((LARGE_INTEGER *) &g_TicksPerSecond);
 #endif
 
+        // TODO: Temp-hack. See Begin()
+#if defined(_WIN32)
+        uint64_t pcnt;
+        QueryPerformanceCounter((LARGE_INTEGER *) &pcnt);
+        g_BeginTime = (uint32_t) pcnt;
+#else
+        timeval tv;
+        gettimeofday(&tv, 0);
+        g_BeginTime = tv.tv_sec * 1000000 + tv.tv_usec;
+#endif
+
         g_IsInitialized = true;
     }
 
@@ -357,6 +369,18 @@ namespace dmProfile
                     else
                     {
                         g_StringTable.Put((uintptr_t) sample->m_Name, sample->m_Name);
+                    }
+                }
+
+                if (sample->m_Arg)
+                {
+                    if (g_StringTable.Full())
+                    {
+                        dmLogWarning("String table full in profiler");
+                    }
+                    else
+                    {
+                        g_StringTable.Put((uintptr_t) sample->m_Arg, (const char*) sample->m_Arg);
                     }
                 }
 
@@ -499,6 +523,8 @@ namespace dmProfile
 
         profile->m_Samples.SetSize(0);
 
+        // TODO: BUG. g_BeginTime not initialized for the first frame
+        // Broken when profiling from "main"
 #if defined(_WIN32)
         uint64_t pcnt;
         QueryPerformanceCounter((LARGE_INTEGER *) &pcnt);
