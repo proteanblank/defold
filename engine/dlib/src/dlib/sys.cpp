@@ -216,8 +216,49 @@ namespace dmSys
 
     Result OpenURL(const char* url)
     {
-        // TODO:
-        return RESULT_UNKNOWN;
+        if (*url == 0x0)
+        {
+            return RESULT_INVAL;
+        }
+        ANativeActivity* activity = g_AndroidApp->activity;
+        JNIEnv* env = 0;
+        activity->vm->AttachCurrentThread( &env, 0);
+
+        jclass uri_class = env->FindClass("android/net/Uri");
+        jstring str_url = env->NewStringUTF(url);
+        jmethodID parse_method = env->GetStaticMethodID(uri_class, "parse", "(Ljava/lang/String;)Landroid/net/Uri;");
+        jobject uri = env->CallStaticObjectMethod(uri_class, parse_method, str_url);
+        env->DeleteLocalRef(str_url);
+        if (uri == NULL)
+        {
+            activity->vm->DetachCurrentThread();
+            return RESULT_UNKNOWN;
+        }
+
+        jclass intent_class = env->FindClass("android/content/Intent");
+        jfieldID action_view_field = env->GetStaticFieldID(intent_class, "ACTION_VIEW", "Ljava/lang/String;");
+        jobject str_action_view = env->GetStaticObjectField(intent_class, action_view_field);
+        jmethodID intent_constructor = env->GetMethodID(intent_class, "<init>", "(Ljava/lang/String;Landroid/net/Uri;)V");
+        jobject intent = env->NewObject(intent_class, intent_constructor, str_action_view, uri);
+        if (intent == NULL)
+        {
+            activity->vm->DetachCurrentThread();
+            return RESULT_UNKNOWN;
+        }
+
+        jclass activity_class = env->FindClass("android/app/NativeActivity");
+        jmethodID start_activity_method = env->GetMethodID(activity_class, "startActivity", "(Landroid/content/Intent;)V");
+        env->CallVoidMethod(activity->clazz, start_activity_method, intent);
+        jthrowable exception = env->ExceptionOccurred();
+        env->ExceptionClear();
+        if (exception != NULL)
+        {
+            activity->vm->DetachCurrentThread();
+            return RESULT_UNKNOWN;
+        }
+
+        activity->vm->DetachCurrentThread();
+        return RESULT_OK;
     }
 
 #elif defined(__linux__)
@@ -445,6 +486,7 @@ namespace dmSys
             jstring android_id_string = env->NewStringUTF("android_id");
             jmethodID get_string_method = env->GetStaticMethodID(secure_class, "getString", "(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;");
             jstring android_id_obj = (jstring) env->CallStaticObjectMethod(secure_class, get_string_method, content_resolver, android_id_string);
+            env->DeleteLocalRef(android_id_string);
             const char* android_id = env->GetStringUTFChars(android_id_obj, NULL);
             dmStrlCpy(info->m_DeviceIdentifier, android_id, sizeof(info->m_DeviceIdentifier));
             env->ReleaseStringUTFChars(android_id_obj, android_id);

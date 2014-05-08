@@ -7,10 +7,10 @@ import cc, cxx
 from Constants import RUN_ME
 
 ANDROID_ROOT=os.path.join(os.environ['HOME'], 'android')
-ANDROID_NDK_VERSION='8e'
+ANDROID_NDK_VERSION='9c'
 ANDROID_NDK_API_VERSION='14'
 ANDROID_API_VERSION='17'
-ANDROID_GCC_VERSION='4.7'
+ANDROID_GCC_VERSION='4.8'
 
 # Workaround for a strange bug with the combination of ccache and clang
 # Without CCACHE_CPP2 set breakpoint for source locations can't be set, e.g. b main.cpp:1234
@@ -62,7 +62,8 @@ def default_flags(self):
 
         if 'arm' in platform:
             # iOS
-            self.env.append_value('LINKFLAGS', ['-framework', 'UIKit'])
+            # NOTE: AdSupport here but used in dlib and hence every other library implicitly
+            self.env.append_value('LINKFLAGS', ['-framework', 'UIKit', '-framework', 'AdSupport'])
         else:
             # OSX
             self.env.append_value('LINKFLAGS', ['-framework', 'AppKit'])
@@ -324,7 +325,7 @@ INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
                 <dict>
                         <key>CFBundleURLSchemes</key>
                         <array>
-                                <string>fb355198514515820</string>
+                                <string>fb596203607098569</string>
                         </array>
                 </dict>
         </array>
@@ -470,7 +471,8 @@ ANDROID_MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
         package="%(package)s"
         android:versionCode="1"
-        android:versionName="1.0">
+        android:versionName="1.0"
+        android:installLocation="auto">
 
     <uses-feature android:required="true" android:glEsVersion="0x00020000" />
     <uses-sdk android:minSdkVersion="9" />
@@ -510,6 +512,15 @@ ANDROID_MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
                 <action android:name="com.defold.push.FORWARD" />
                 <category android:name="com.defold.push" />
             </intent-filter>
+        </receiver>
+
+        <service android:name="com.defold.adtruth.InstallReceiver"/>
+        <receiver
+            android:name="com.defold.adtruth.InstallReceiver"
+            android:exported="true">
+          <intent-filter>
+            <action android:name="com.android.vending.INSTALL_REFERRER" />
+          </intent-filter>
         </receiver>
 
         %(extra_activities)s
@@ -620,8 +631,9 @@ def android_package(task):
     r_java_files = []
     for root, dirs, files in os.walk(r_java_gen_dir):
         for f in files:
-            p = os.path.join(root, f)
-            r_java_files.append(p)
+            if f.endswith(".java"):
+                p = os.path.join(root, f)
+                r_java_files.append(p)
 
     ret = bld.exec_command('%s %s %s' % (task.env['JAVAC'][0], '-source 1.6 -target 1.6', ' '.join(r_java_files)))
     if ret != 0:
@@ -739,18 +751,14 @@ def create_android_package(self):
 
     self.android_package_task = android_package_task
 
-def copy_glue(task):
-    with open(task.glue_file, 'rb') as in_f:
-        with open(task.outputs[0].bldpath(task.env), 'wb') as out_f:
-            out_f.write(in_f.read())
-
-    with open(task.outputs[1].bldpath(task.env), 'wb') as out_f:
+def copy_stub(task):
+    with open(task.outputs[0].bldpath(task.env), 'wb') as out_f:
         out_f.write(ANDROID_STUB)
 
     return 0
 
-task = Task.task_type_from_func('copy_glue',
-                                func  = copy_glue,
+task = Task.task_type_from_func('copy_stub',
+                                func  = copy_stub,
                                 color = 'PINK',
                                 before  = 'cc cxx')
 
@@ -763,14 +771,11 @@ def create_copy_glue(self):
     if not re.match('arm.*?android', self.env['PLATFORM']):
         return
 
-    glue = self.path.find_or_declare('android_native_app_glue.c')
-    self.allnodes.append(glue)
     stub = self.path.find_or_declare('android_stub.c')
     self.allnodes.append(stub)
 
-    task = self.create_task('copy_glue')
-    task.glue_file = '%s/android-ndk-r%s/sources/android/native_app_glue/android_native_app_glue.c' % (ANDROID_ROOT, ANDROID_NDK_VERSION)
-    task.set_outputs([glue, stub])
+    task = self.create_task('copy_stub')
+    task.set_outputs([stub])
 
 def embed_build(task):
     symbol = task.inputs[0].name.upper().replace('.', '_').replace('-', '_').replace('@', 'at')

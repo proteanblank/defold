@@ -142,9 +142,10 @@ static const luaL_reg Push_methods[] =
 };
 
 // NOTE: Copy-paste from script_json
-static int ToLua(lua_State*L, dmJson::Document* doc, const char* json, int index)
+static int ToLua(lua_State*L, dmJson::Document* doc, int index)
 {
     const dmJson::Node& n = doc->m_Nodes[index];
+    const char* json = doc->m_Json;
     int l = n.m_End - n.m_Start;
     switch (n.m_Type)
     {
@@ -169,7 +170,7 @@ static int ToLua(lua_State*L, dmJson::Document* doc, const char* json, int index
         lua_createtable(L, n.m_Size, 0);
         ++index;
         for (int i = 0; i < n.m_Size; ++i) {
-            index = ToLua(L, doc, json, index);
+            index = ToLua(L, doc, index);
             lua_rawseti(L, -2, i+1);
         }
         return index;
@@ -178,8 +179,8 @@ static int ToLua(lua_State*L, dmJson::Document* doc, const char* json, int index
         lua_createtable(L, 0, n.m_Size);
         ++index;
         for (int i = 0; i < n.m_Size; i += 2) {
-            index = ToLua(L, doc, json, index);
-            index = ToLua(L, doc, json, index);
+            index = ToLua(L, doc, index);
+            index = ToLua(L, doc, index);
             lua_rawset(L, -3);
         }
 
@@ -247,13 +248,13 @@ JNIEXPORT void JNICALL Java_com_defold_push_PushJNI_onMessage(JNIEnv* env, jobje
 
 void HandleRegistrationResult(const Command* cmd)
 {
-    lua_State* L = g_Push.m_L;
-    int top = lua_gettop(L);
-
     if (g_Push.m_Callback == LUA_NOREF) {
         dmLogError("No callback set");
         return;
     }
+
+    lua_State* L = g_Push.m_L;
+    int top = lua_gettop(L);
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, g_Push.m_Callback);
 
@@ -295,13 +296,13 @@ void HandleRegistrationResult(const Command* cmd)
 
 void HandlePushMessageResult(const Command* cmd)
 {
-    lua_State* L = g_Push.m_Listener.m_L;
-    int top = lua_gettop(L);
-
     if (g_Push.m_Listener.m_Callback == LUA_NOREF) {
         dmLogError("No callback set");
         return;
     }
+
+    lua_State* L = g_Push.m_Listener.m_L;
+    int top = lua_gettop(L);
 
     lua_rawgeti(L, LUA_REGISTRYINDEX, g_Push.m_Listener.m_Callback);
 
@@ -321,7 +322,7 @@ void HandlePushMessageResult(const Command* cmd)
     dmJson::Document doc;
     dmJson::Result r = dmJson::Parse((const char*) cmd->m_Data1, &doc);
     if (r == dmJson::RESULT_OK && doc.m_NodeCount > 0) {
-        ToLua(L, &doc, (const char*) cmd->m_Data1, 0);
+        ToLua(L, &doc, 0);
         int ret = lua_pcall(L, 2, LUA_MULTRET, 0);
         if (ret != 0) {
             dmLogError("Error running push callback: %s", lua_tostring(L,-1));
@@ -426,6 +427,10 @@ dmExtension::Result AppFinalizePush(dmExtension::AppParams* params)
     env->DeleteGlobalRef(g_Push.m_PushJNI);
     Detach();
     g_Push.m_Push = NULL;
+    g_Push.m_PushJNI = NULL;
+    g_Push.m_L = 0;
+    g_Push.m_Callback = LUA_NOREF;
+    g_Push.m_Self = LUA_NOREF;
 
     int result = ALooper_removeFd(g_AndroidApp->looper, g_Push.m_Pipefd[0]);
     if (result != 1) {
@@ -433,7 +438,9 @@ dmExtension::Result AppFinalizePush(dmExtension::AppParams* params)
     }
 
     close(g_Push.m_Pipefd[0]);
+    env = Attach();
     close(g_Push.m_Pipefd[1]);
+    Detach();
 
     return dmExtension::RESULT_OK;
 }

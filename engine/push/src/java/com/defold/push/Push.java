@@ -49,14 +49,19 @@ public class Push {
         this.listener = null;
     }
 
-    public void register(Activity activity) {
-        try {
-            startGooglePlay(activity);
-            loadSavedMessages(activity);
-        } catch (Throwable e) {
-            Log.e(TAG, "Failed to register", e);
-            sendRegistrationResult(null, e.getLocalizedMessage());
-        }
+    public void register(final Activity activity) {
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    startGooglePlay(activity);
+                    loadSavedMessages(activity);
+                } catch (Throwable e) {
+                    Log.e(TAG, "Failed to register", e);
+                    sendRegistrationResult(null, e.getLocalizedMessage());
+                }
+            }
+        });
     }
 
     public static Push getInstance() {
@@ -174,10 +179,9 @@ public class Push {
                 if (listener != null) {
                     Log.d(TAG, "forwarding message to application");
                     listener.onMessage(msg);
-                } else {
-                    Log.d(TAG, "creating notification for message2");
-                    sendNotification(context, extras);
                 }
+                Log.d(TAG, "creating notification for message");
+                sendNotification(context, extras);
             } else {
                 Log.i(TAG, String.format("unhandled message type: %s",
                         messageType));
