@@ -11,7 +11,7 @@ Build utility for installing external packages, building engine, editor and cr
 Run build.py --help for help
 """
 
-PACKAGES_ALL="protobuf-2.3.0 waf-1.5.9 gtest-1.5.0 vectormathlibrary-r1649 nvidia-texture-tools-2.0.6 PIL-1.1.6 junit-4.6 protobuf-java-2.3.0 openal-1.1 maven-3.0.1 ant-1.8.4 vecmath vpx-v0.9.7-p1 asciidoc-8.6.7".split()
+PACKAGES_ALL="protobuf-2.3.0 waf-1.5.9 gtest-1.5.0 vectormathlibrary-r1649 nvidia-texture-tools-2.0.6 PIL-1.1.6 junit-4.6 protobuf-java-2.3.0 openal-1.1 maven-3.0.1 ant-1.9.3 vecmath vpx-v0.9.7-p1 asciidoc-8.6.7".split()
 PACKAGES_HOST="protobuf-2.3.0 gtest-1.5.0 glut-3.7.6 cg-2.1 nvidia-texture-tools-2.0.6 PIL-1.1.6 openal-1.1 vpx-v0.9.7-p1 PVRTexLib-4.5".split()
 PACKAGES_EGGS="protobuf-2.3.0-py2.5.egg pyglet-1.1.3-py2.5.egg gdata-2.0.6-py2.6.egg Jinja2-2.6-py2.6.egg".split()
 PACKAGES_IOS="protobuf-2.3.0 gtest-1.5.0 facebook-3.5.3".split()
@@ -358,46 +358,22 @@ class Configuration(object):
                           cwd = cwd)
 
     def _get_cr_builddir(self, product):
-        return join(os.getcwd(), 'tmp', product)
+        return join(os.getcwd(), 'com.dynamo.cr/com.dynamo.cr.%s-product' % product)
 
     def build_server(self):
-        build_dir = self._get_cr_builddir('server')
-        self._build_cr('server', build_dir)
+        self._build_cr('server')
 
     def build_editor(self):
-        build_dir = self._get_cr_builddir('editor')
-
-        root_properties = '''root.linux.gtk.x86=absolute:${buildDirectory}/plugins/com.dynamo.cr.editor/jre_linux/
-root.linux.gtk.x86.permissions.755=jre/'''
-        self._build_cr('editor', build_dir, root_properties = root_properties)
-
-        # NOTE:
-        # Due to bug https://bugs.eclipse.org/bugs/show_bug.cgi?id=300812
-        # we cannot add jre to p2 on win32
-        # The jre is explicitly bundled instead
-        prefix = 'Defold'
-        zip = join(build_dir, 'I.Defold/Defold-win32.win32.x86.zip')
-        jre_root = join(build_dir, 'plugins/com.dynamo.cr.editor/jre_win32')
-        zip = zipfile.ZipFile(zip, 'a')
-
-        for root, dirs, files in os.walk(jre_root):
-            for f in files:
-                full = join(root, f)
-                rel = relpath(full, jre_root)
-                with open(full, 'rb') as file:
-                    data = file.read()
-                    path = join(prefix, rel)
-                    zip.writestr(path, data)
-        zip.close()
+        self._build_cr('editor')
 
     def _archive_cr(self, product, build_dir):
         sha1 = self._git_sha1()
         full_archive_path = join(self.archive_path, sha1, product).replace('\\', '/')
         host, path = full_archive_path.split(':', 1)
         self.exec_command(['ssh', host, 'mkdir -p %s' % path])
-        for p in glob(join(build_dir, 'I.*/*.zip')):
+        for p in glob(join(build_dir, 'target/products/*.zip')):
             self.exec_command(['scp', p, full_archive_path])
-        self.exec_command(['tar', '-C', build_dir, '-cz', '-f', join(build_dir, '%s_repository.tgz' % product), 'repository'])
+        self.exec_command(['tar', '-C', build_dir, '-cz', '-f', join(build_dir, '%s_repository.tgz' % product), 'target/repository'])
         self.exec_command(['scp', join(build_dir, '%s_repository.tgz' % product), full_archive_path])
 
         if self.branch:
@@ -412,50 +388,9 @@ root.linux.gtk.x86.permissions.755=jre/'''
         build_dir = self._get_cr_builddir('server')
         self._archive_cr('server', build_dir)
 
-    def _build_cr(self, product, build_dir, root_properties = None):
-        equinox_version = '1.3.0.v20120522-1813'
-
-        if os.path.exists(build_dir):
-            shutil.rmtree(build_dir)
-        os.makedirs(join(build_dir, 'plugins'))
-        os.makedirs(join(build_dir, 'features'))
-
-        if root_properties:
-            with open(join(build_dir, 'root.properties'), 'wb') as f:
-                f.write(root_properties)
-
-        workspace = join(os.getcwd(), 'tmp', 'workspace_%s' % product)
-        if os.path.exists(workspace):
-            shutil.rmtree(workspace)
-        os.makedirs(workspace)
-
-        # copy engine
-        p = join(self.defold_root, 'engine')
-        dst = join(build_dir, basename(p))
-        self._log('Copying .../%s -> %s' % (basename(p), dst))
-        shutil.copytree(p, dst)
-
-        # copy plugins
-        for p in glob(join(self.defold_root, 'com.dynamo.cr', '*')):
-            dst = join(build_dir, 'plugins', basename(p))
-            self._log('Copying .../%s -> %s' % (basename(p), dst))
-            shutil.copytree(p, dst)
-
-        args = ['java',
-                # Try to avoid zip-bug in ant 1.8.2, see https://bugs.eclipse.org/bugs/show_bug.cgi?id=346730
-                '-XX:+UseParNewGC',
-                '-Xms256m',
-                '-Xmx1500m',
-                '-jar',
-                '%s/plugins/org.eclipse.equinox.launcher_%s.jar' % (self.eclipse_home, equinox_version),
-                '-application', 'org.eclipse.ant.core.antRunner',
-                '-buildfile', 'ci/cr/build_%s.xml' % product,
-                '-DbaseLocation=%s' % self.eclipse_home,
-                '-DbuildDirectory=%s' % build_dir,
-                '-DbuildProperties=%s' % join(os.getcwd(), 'ci/cr/%s.properties' % product),
-                '-data', workspace]
-
-        self.exec_command(args)
+    def _build_cr(self, product):
+        cwd = join(self.defold_root, 'com.dynamo.cr', 'com.dynamo.cr.parent')
+        self.exec_command([join(self.dynamo_home, 'ext/share/maven/bin/mvn'), 'clean', 'package', '-P', product], cwd = cwd)
 
     def bump(self):
         sha1 = self._git_sha1()
@@ -473,7 +408,7 @@ root.linux.gtk.x86.permissions.755=jre/'''
         with open('VERSION', 'w') as f:
             f.write(new_version)
 
-        with open('com.dynamo.cr/com.dynamo.cr.editor/cr.product', 'a+') as f:
+        with open('com.dynamo.cr/com.dynamo.cr.editor-product/cr.product', 'a+') as f:
             f.seek(0)
             product = f.read()
 
