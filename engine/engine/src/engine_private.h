@@ -103,6 +103,8 @@ namespace dmEngine
         dmRender::HRenderContext                    m_RenderContext;
         dmGameSystem::PhysicsContext                m_PhysicsContext;
         dmGameSystem::ParticleFXContext             m_ParticleFXContext;
+        /// If the shared context is set, the three environment specific contexts below will point to the same context
+        dmScript::HContext                          m_SharedScriptContext;
         dmScript::HContext                          m_GOScriptContext;
         dmScript::HContext                          m_RenderScriptContext;
         dmScript::HContext                          m_GuiScriptContext;
@@ -112,6 +114,8 @@ namespace dmEngine
         dmGameSystem::SpriteContext                 m_SpriteContext;
         dmGameSystem::CollectionProxyContext        m_CollectionProxyContext;
         dmGameSystem::FactoryContext                m_FactoryContext;
+        dmGameSystem::SpineModelContext             m_SpineModelContext;
+        dmGameObject::ModuleContext                 m_ModuleContext;
 
         dmRender::HFontMap                          m_SystemFontMap;
         dmHID::HContext                             m_HidContext;

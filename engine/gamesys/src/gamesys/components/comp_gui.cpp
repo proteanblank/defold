@@ -80,17 +80,24 @@ namespace dmGameSystem
                                     0xff, 0xff, 0xff, 0xff,
                                     0xff, 0xff, 0xff, 0xff };
 
+        dmGraphics::TextureCreationParams tex_create_params;
         dmGraphics::TextureParams tex_params;
+
+        tex_create_params.m_Width = 2;
+        tex_create_params.m_Height = 2;
+        tex_create_params.m_OriginalWidth = 2;
+        tex_create_params.m_OriginalHeight = 2;
+
         tex_params.m_Format = dmGraphics::TEXTURE_FORMAT_RGBA;
         tex_params.m_Data = white_texture;
         tex_params.m_DataSize = sizeof(white_texture);
         tex_params.m_Width = 2;
         tex_params.m_Height = 2;
-        tex_params.m_OriginalWidth = 2;
-        tex_params.m_OriginalHeight = 2;
         tex_params.m_MinFilter = dmGraphics::TEXTURE_FILTER_NEAREST;
         tex_params.m_MagFilter = dmGraphics::TEXTURE_FILTER_NEAREST;
-        gui_world->m_WhiteTexture = dmGraphics::NewTexture(dmRender::GetGraphicsContext(gui_context->m_RenderContext), tex_params);
+
+        gui_world->m_WhiteTexture = dmGraphics::NewTexture(dmRender::GetGraphicsContext(gui_context->m_RenderContext), tex_create_params);
+        dmGraphics::SetTexture(gui_world->m_WhiteTexture, tex_params);
 
         // Grows automatically
         gui_world->m_GuiRenderObjects.SetCapacity(128);
@@ -224,6 +231,7 @@ namespace dmGameSystem
                 dmGui::SetNodeYAnchor(scene, n, (dmGui::YAnchor) node_desc->m_Yanchor);
                 dmGui::SetNodeAdjustMode(scene, n, adjust_mode);
                 dmGui::SetNodeResetPoint(scene, n);
+                dmGui::SetNodeInheritAlpha(scene, n, node_desc->m_InheritAlpha);
             }
             else
             {
@@ -366,6 +374,7 @@ namespace dmGameSystem
     void RenderTextNodes(dmGui::HScene scene,
                          dmGui::HNode* nodes,
                          const Matrix4* node_transforms,
+                         const Vector4* node_colors,
                          uint32_t node_count,
                          void* context)
     {
@@ -374,7 +383,7 @@ namespace dmGameSystem
         {
             dmGui::HNode node = nodes[i];
 
-            const Vector4& color = dmGui::GetNodeProperty(scene, node, dmGui::PROPERTY_COLOR);
+            const Vector4& color = node_colors[i];
             const Vector4& outline = dmGui::GetNodeProperty(scene, node, dmGui::PROPERTY_OUTLINE);
             const Vector4& shadow = dmGui::GetNodeProperty(scene, node, dmGui::PROPERTY_SHADOW);
 
@@ -440,6 +449,7 @@ namespace dmGameSystem
     void RenderBoxNodes(dmGui::HScene scene,
                         dmGui::HNode* nodes,
                         const Matrix4* node_transforms,
+                        const Vector4* node_colors,
                         uint32_t node_count,
                         void* context)
     {
@@ -481,9 +491,7 @@ namespace dmGameSystem
 
         for (uint32_t i = 0; i < node_count; ++i)
         {
-            dmGui::HNode node = nodes[i];
-
-            const Vector4& color = dmGui::GetNodeProperty(scene, node, dmGui::PROPERTY_COLOR);
+            const Vector4& color = node_colors[i];
 
             ro.m_RenderKey.m_Depth = gui_context->m_NextZ;
             // Pre-multiplied alpha
@@ -521,6 +529,7 @@ namespace dmGameSystem
     void RenderNodes(dmGui::HScene scene,
                     dmGui::HNode* nodes,
                     const Matrix4* node_transforms,
+                    const Vector4* node_colors,
                     uint32_t node_count,
                     void* context)
     {
@@ -552,9 +561,9 @@ namespace dmGameSystem
             if (flush) {
                 uint32_t n = i - start;
                 if (prev_node_type == dmGui::NODE_TYPE_TEXT) {
-                    RenderTextNodes(scene, nodes + start, node_transforms + start, n, context);
+                    RenderTextNodes(scene, nodes + start, node_transforms + start, node_colors + start, n, context);
                 } else {
-                    RenderBoxNodes(scene, nodes + start, node_transforms + start, n, context);
+                    RenderBoxNodes(scene, nodes + start, node_transforms + start, node_colors + start, n, context);
                 }
 
                 start = i;
@@ -578,9 +587,9 @@ namespace dmGameSystem
         uint32_t n = i - start;
         if (n > 0) {
             if (prev_node_type == dmGui::NODE_TYPE_TEXT) {
-                RenderTextNodes(scene, nodes + start, node_transforms + start, n, context);
+                RenderTextNodes(scene, nodes + start, node_transforms + start, node_colors + start, n, context);
             } else {
-                RenderBoxNodes(scene, nodes + start, node_transforms + start, n, context);
+                RenderBoxNodes(scene, nodes + start, node_transforms + start, node_colors + start, n, context);
             }
         }
 
@@ -612,7 +621,14 @@ namespace dmGameSystem
         RenderGuiContext* gui_context = (RenderGuiContext*) context;
         dmGraphics::HContext gcontext = dmRender::GetGraphicsContext(gui_context->m_RenderContext);
 
+        dmGraphics::TextureCreationParams tcparams;
         dmGraphics::TextureParams tparams;
+
+        tcparams.m_Width = width;
+        tcparams.m_Height = height;
+        tcparams.m_OriginalWidth = width;
+        tcparams.m_OriginalHeight = height;
+
         tparams.m_Width = width;
         tparams.m_Height = height;
         tparams.m_MinFilter = dmGraphics::TEXTURE_FILTER_LINEAR;
@@ -621,7 +637,8 @@ namespace dmGameSystem
         tparams.m_DataSize = dmImage::BytesPerPixel(type) * width * height;
         tparams.m_Format = ToGraphicsFormat(type);
 
-        dmGraphics::HTexture t =  dmGraphics::NewTexture(gcontext, tparams);
+        dmGraphics::HTexture t =  dmGraphics::NewTexture(gcontext, tcparams);
+        dmGraphics::SetTexture(t, tparams);
         return (void*) t;
     }
 

@@ -1,13 +1,9 @@
 package com.dynamo.cr.target.core;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.StringReader;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
-import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -21,13 +17,13 @@ import java.util.Set;
 import javax.inject.Inject;
 import javax.ws.rs.core.UriBuilder;
 
-import org.apache.commons.io.IOUtils;
 import org.eclipse.core.commands.Command;
 import org.eclipse.core.commands.State;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.commands.ICommandService;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.IllegalNameException;
 import org.jdom2.Namespace;
 import org.jdom2.input.JDOMParseException;
 import org.jdom2.input.SAXBuilder;
@@ -35,7 +31,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.dynamo.cr.common.util.NetworkUtil;
-import com.dynamo.cr.editor.core.IConsole;
 import com.dynamo.cr.editor.core.IConsoleFactory;
 import com.dynamo.upnp.DeviceInfo;
 import com.dynamo.upnp.ISSDP;
@@ -58,19 +53,19 @@ public class TargetService implements ITargetService, Runnable {
     private volatile boolean stopped = false;
     private ISSDP ssdp;
     private IURLFetcher urlFetcher;
-    private IConsoleFactory consoleFactory;
     private int searchInterval = 60;
     private long lastSearch = 0;
     private ITarget[] targets;
-    private Socket logSocket;
-    private InetSocketAddress logSocketAddress;
-    // Number of times the socket connection has been attempted without success
-    private int logSocketConnectionAttempts = 0;
-
-    // Attempt to connect for 2 seconds in case of failure
-    private static final int MAX_LOG_CONNECTION_ATTEMPTS = 20;
+    protected LogClient logClient;
 
     private static Logger logger = LoggerFactory.getLogger(TargetService.class);
+
+    @SuppressWarnings("serial")
+    private static class IncompleteXMLException extends Exception {
+        public IncompleteXMLException(String msg) {
+            super(msg);
+        }
+    }
 
     private static ITarget createLocalTarget() {
         InetAddress localAddress = null;
@@ -103,7 +98,10 @@ public class TargetService implements ITargetService, Runnable {
         lastSearch = System.currentTimeMillis() - searchInterval * 1000;
         this.ssdp = ssdp;
         this.urlFetcher = urlFetcher;
-        this.consoleFactory = consoleFactory;
+
+        this.logClient = new LogClient(consoleFactory.getConsole("console"));
+        this.logClient.start();
+
         thread = new Thread(this, "Targets Service");
         thread.start();
     }
@@ -127,8 +125,10 @@ public class TargetService implements ITargetService, Runnable {
     public void stop() {
         stopped = true;
         thread.interrupt();
+        logClient.stopLog();
         try {
             thread.join();
+            logClient.join();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -166,7 +166,6 @@ public class TargetService implements ITargetService, Runnable {
                         updateTargets();
                         postEvent(new TargetChangedEvent(this));
                     }
-                    updateLog();
                 } catch (IOException e) {
                     // Do not log IOException. Network is down, etc
                 }
@@ -183,13 +182,19 @@ public class TargetService implements ITargetService, Runnable {
         lastSearch = System.currentTimeMillis() - searchInterval * 1000;
     }
 
-    private String getRequiredDeviceField(Element device, String name,
-            Namespace ns) {
-        Element e = device.getChild(name, ns);
+    private Element getRequiredElement(Element element, String name,
+            Namespace ns) throws IncompleteXMLException {
+        Element e = element.getChild(name, ns);
         if (e == null) {
-            throw new RuntimeException(String.format(
+            throw new IncompleteXMLException(String.format(
                     "Required element %s not found", name));
         }
+        return e;
+    }
+
+    private String getRequiredField(Element element, String name,
+            Namespace ns) throws IncompleteXMLException {
+        Element e = getRequiredElement(element, name, ns);
         return e.getTextTrim();
     }
 
@@ -236,16 +241,14 @@ public class TargetService implements ITargetService, Runnable {
                         .getNamespace("urn:schemas-upnp-org:device-1-0");
                 Namespace defoldNS = Namespace
                         .getNamespace("urn:schemas-defold-com:DEFOLD-1-0");
-                Element device = doc.getRootElement()
-                        .getChild("device", upnpNS);
-                String manufacturer = device.getChild("manufacturer", upnpNS)
-                        .getTextTrim();
-                String udn = getRequiredDeviceField(device, "UDN", upnpNS);
-                String friendlyName = getRequiredDeviceField(device, "friendlyName", upnpNS);
+                Element device = getRequiredElement(doc.getRootElement(), "device", upnpNS);
+                String manufacturer = getRequiredField(device, "manufacturer", upnpNS);
+                String udn = getRequiredField(device, "UDN", upnpNS);
+                String friendlyName = getRequiredField(device, "friendlyName", upnpNS);
 
                 if (manufacturer.equalsIgnoreCase("defold")) {
-                    String url = getRequiredDeviceField(device, "url", defoldNS);
-                    String logPort = getRequiredDeviceField(device, "logPort", defoldNS);
+                    String url = getRequiredField(device, "url", defoldNS);
+                    String logPort = getRequiredField(device, "logPort", defoldNS);
                     // TODO: Local should be iPhone or Joe's iPhone or similar
                     // when iPhone supported is completed
                     String name = String.format("%s (%s)", friendlyName, deviceInfo.address);
@@ -264,6 +267,11 @@ public class TargetService implements ITargetService, Runnable {
 
                 }
             } catch (JDOMParseException e) {
+                // Do not log here. We've seen invalid xml responses in real networks
+            } catch (IllegalNameException e) {
+                // Do not log here. We've seen invalid xml responses in real networks
+                // Example message from such an exception: "The name " urn:microsoft-com:wmc-1-0" is not legal for JDOM/XML Namespace URIs: Namespace URIs cannot begin with white-space."
+            } catch (IncompleteXMLException e) {
                 // Do not log here. We've seen invalid xml responses in real networks
             } catch (IOException e) {
                 // Do not log IOException. This happens...
@@ -295,100 +303,6 @@ public class TargetService implements ITargetService, Runnable {
                 listener.targetsChanged(event);
             } catch (Throwable e) {
                 logger.error(e.getMessage(), e);
-            }
-        }
-    }
-
-    // Obtain a socket connection to the specified address
-    private static Socket newLogConnection(InetSocketAddress address) {
-        Socket socket = new Socket();
-
-        InputStream is = null;
-        try {
-            socket.setSoTimeout(2000);
-            socket.connect(address);
-
-            StringBuilder sb = new StringBuilder();
-            is = socket.getInputStream();
-            int c = is.read();
-            while (c != '\n' && c != -1) {
-                if (c != '\r') {
-                    sb.append((char) c);
-                }
-                c = is.read();
-            }
-            if (!sb.toString().equals("0 OK")) {
-                throw new IOException(String.format("Unable to connect to log-service (%s)", sb.toString()));
-            }
-            socket.setSoTimeout(0);
-            return socket;
-        } catch (IOException e) {
-            IOUtils.closeQuietly(is);
-            IOUtils.closeQuietly(socket);
-            logger.debug("Could not create log connection: {}", e.getMessage());
-        }
-        return null;
-    }
-
-    // Resets existing log socket, if any.
-    private void resetLogSocket() {
-        if (this.logSocket != null) {
-            try {
-                this.logSocket.close();
-            } catch (IOException e) {
-                logger.warn("Log socket could not be closed: {}", e.getMessage());
-            }
-        }
-        this.logSocket = null;
-        this.logSocketConnectionAttempts = 0;
-    }
-
-    // Make one attempt to connect to the log socket.
-    // If the maximum number of retries is reached, the stored address is reset to avoid further connections.
-    private void connectLogSocket() {
-        if (this.logSocketAddress != null && this.logSocket == null) {
-            this.logSocket = newLogConnection(this.logSocketAddress);
-            if (this.logSocket == null) {
-                ++this.logSocketConnectionAttempts;
-                if (this.logSocketConnectionAttempts >= MAX_LOG_CONNECTION_ATTEMPTS) {
-                    logger.error("Terminally giving up log connection after max tries.");
-                    this.logSocketAddress = null;
-                }
-            }
-        }
-    }
-
-    private synchronized void updateLog() {
-        // Close stale socket connections
-        if (this.logSocket != null && !this.logSocket.isConnected()) {
-            resetLogSocket();
-        }
-        // Check to see if we should make a new connection
-        connectLogSocket();
-        // Read from the socket when available
-        if (this.logSocket != null && this.logSocket.isConnected()) {
-            try {
-                byte[] data = null;
-                OutputStream out = null;
-                InputStream in = this.logSocket.getInputStream();
-                int available = in.available();
-                while (available > 0) {
-                    if (out == null) {
-                        IConsole console = this.consoleFactory.getConsole("console");
-                        out = console.createOutputStream();
-                        data = new byte[128];
-                    }
-                    int count = Math.min(available, data.length);
-                    in.read(data, 0, count);
-                    out.write(data, 0, count);
-                    available = in.available();
-                }
-                if (out != null) {
-                    out.close();
-                }
-            } catch (IOException e) {
-                logger.error(e.getMessage(), e);
-                resetLogSocket();
             }
         }
     }
@@ -444,42 +358,7 @@ public class TargetService implements ITargetService, Runnable {
                 autoRunDebugger, socksProxy, socksProxyPort, getHttpServerURL(targetToLaunch.getInetAddress(),
                         httpServerPort));
         launchThread.start();
-        resetLogSocket();
-        this.logSocketAddress = findLogSocketAddress(targetToLaunch);
-    }
-
-    protected void obtainSocketAddress(ITarget target) {
-        this.logSocketAddress = findLogSocketAddress(target);
-    }
-
-    private boolean isTargetLocal(ITarget target) {
-        if (target.getUrl() == null) {
-            return true;
-        } else {
-            // Check if the target address is a local network interface
-            try {
-                if (NetworkUtil.getValidHostAddresses().contains(target.getInetAddress()))
-                    return true;
-            } catch (Exception e) {
-                logger.warn("Could not retrieve host addresses: {}", e.getMessage());
-            }
-        }
-        return false;
-    }
-
-    private InetSocketAddress findLogSocketAddress(ITarget target) {
-        // Ignore the address if it's local
-        // Local targets are already logged from the process streams instead of a socket
-        if (!isTargetLocal(target)) {
-            try {
-                URL url = new URL(target.getUrl());
-                String host = url.getHost();
-                return new InetSocketAddress(host, target.getLogPort());
-            } catch (MalformedURLException e) {
-                logger.warn("Could not open log socket: {}", e.getMessage());
-            }
-        }
-        return null;
+        logClient.resetLogSocket(targetToLaunch);
     }
 
 }

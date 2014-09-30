@@ -28,13 +28,17 @@ protected:
         params.m_Flags = RESOURCE_FACTORY_FLAGS_RELOAD_SUPPORT;
         m_Path = "build/default/src/gameobject/test/script";
         m_Factory = dmResource::NewFactory(&params, m_Path);
-        m_ScriptContext = dmScript::NewContext(0, 0);
-        dmGameObject::Initialize(m_ScriptContext, m_Factory);
+        m_ScriptContext = dmScript::NewContext(0, m_Factory);
+        dmScript::Initialize(m_ScriptContext);
+        dmGameObject::Initialize(m_ScriptContext);
         m_Register = dmGameObject::NewRegister();
-        dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-        dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+        m_ModuleContext.m_ScriptContexts.SetCapacity(1);
+        m_ModuleContext.m_ScriptContexts.Push(m_ScriptContext);
+        dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+        dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
         m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
-        assert(dmMessage::NewSocket("@system", &m_Socket) == dmMessage::RESULT_OK);
+        dmMessage::Result result = dmMessage::NewSocket("@system", &m_Socket);
+        assert(result == dmMessage::RESULT_OK);
     }
 
     virtual void TearDown()
@@ -42,10 +46,10 @@ protected:
         dmMessage::DeleteSocket(m_Socket);
         dmGameObject::DeleteCollection(m_Collection);
         dmGameObject::PostUpdate(m_Register);
-        dmGameObject::Finalize(m_ScriptContext, m_Factory);
+        dmScript::Finalize(m_ScriptContext);
+        dmScript::DeleteContext(m_ScriptContext);
         dmResource::DeleteFactory(m_Factory);
         dmGameObject::DeleteRegister(m_Register);
-        dmScript::DeleteContext(m_ScriptContext);
     }
 
 public:
@@ -57,6 +61,7 @@ public:
     dmMessage::HSocket m_Socket;
     dmScript::HContext m_ScriptContext;
     const char* m_Path;
+    dmGameObject::ModuleContext m_ModuleContext;
 };
 
 struct TestScript01Context
@@ -75,7 +80,6 @@ void TestScript01SystemDispatch(dmMessage::Message* message, void* user_ptr)
 
     TestGameObjectDDF::FactoryResult result;
     result.m_Status = 1010;
-    dmMessage::URL receiver = message->m_Sender;
     dmDDF::Descriptor* descriptor = TestGameObjectDDF::FactoryResult::m_DDFDescriptor;
     ASSERT_EQ(dmMessage::RESULT_OK, dmMessage::Post(&message->m_Receiver, &message->m_Sender, dmHashString64(descriptor->m_Name), 0, (uintptr_t)descriptor, &result, sizeof(TestGameObjectDDF::FactoryResult)));
 
@@ -102,7 +106,7 @@ TEST_F(ScriptTest, TestScript01)
     global_data.m_VecValue.setY(2.0f);
     global_data.m_VecValue.setZ(3.0f);
 
-    dmGameObject::Init(m_Collection);
+    ASSERT_TRUE(dmGameObject::Init(m_Collection));
 
     ASSERT_TRUE(dmGameObject::Update(m_Collection, &m_UpdateContext));
 
@@ -355,7 +359,7 @@ int TestRef(lua_State* L)
 
 TEST_F(ScriptTest, TestInstanceCallback)
 {
-    lua_State* L = dmGameObject::GetLuaState();
+    lua_State* L = dmScript::GetLuaState(m_ScriptContext);
 
     lua_register(L, "test_ref", TestRef);
 

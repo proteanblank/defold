@@ -29,6 +29,7 @@ public class SplashHandler extends AbstractSplashHandler implements PaintListene
     private Image progressBg;
     private Canvas canvas;
     private Monitor monitor;
+    private Image ribbon;
 
     public SplashHandler() {
     }
@@ -45,6 +46,9 @@ public class SplashHandler extends AbstractSplashHandler implements PaintListene
         configureUISplash();
         progressFg = loadImage("progress_fg.png");
         progressBg = loadImage("progress_bg.png");
+        if (EditorCorePlugin.getDefault().getChannel().equals("beta")) {
+            ribbon = loadImage("/icons/launching/beta.png");
+        }
     }
 
     private class Monitor implements IProgressMonitor {
@@ -83,6 +87,12 @@ public class SplashHandler extends AbstractSplashHandler implements PaintListene
             this.worked += work;
 
             Shell splashShell = getSplash();
+            if (splashShell == null) {
+            	// In Eclipse 4 this one is invoke whenever a bundle change
+            	// and after the splash is disposed.
+            	// See org.eclipse.ui.internal.Workbench$StartupProgressBundleListener.bundleChanged
+            	return;
+            }
             Display display = splashShell.getDisplay();
 
             if (Thread.currentThread() == display.getThread()) {
@@ -124,6 +134,9 @@ public class SplashHandler extends AbstractSplashHandler implements PaintListene
         super.dispose();
         progressBg.dispose();
         progressFg.dispose();
+        if (ribbon != null) {
+            ribbon.dispose();
+        }
     }
 
     @Override
@@ -140,11 +153,14 @@ public class SplashHandler extends AbstractSplashHandler implements PaintListene
         gc.drawImage(progressBg, x, progressY);
         gc.drawImage(progressFg, 0, 0, w, progressHeight, x, progressY, w, progressHeight);
 
-        String text = String.format("Version %s", EditorCorePlugin.VERSION);
+        String text = String.format("Version %s", EditorCorePlugin.getDefault().getVersion());
         int textWidth = gc.stringExtent(text).x;
         gc.setBackground(new Color(getSplash().getDisplay(), 255, 255, 255));
         gc.drawText(text, width / 2 - textWidth / 2, 360 - gc.getFontMetrics().getHeight() / 2);
 
+        if (ribbon != null) {
+            gc.drawImage(ribbon, 0, 0);
+        }
         gc.dispose();
     }
 }

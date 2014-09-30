@@ -124,7 +124,7 @@ public class SceneModel implements IAdaptable, IOperationHistoryListener, IScene
 
     public void dispose(GL2 gl) {
         if (this.root != null) {
-            this.root.dispose();
+            this.root.dispose(gl);
         }
         this.history.removeOperationHistoryListener(this);
         for (TextureHandle texture : this.textureCache.values()) {
@@ -288,6 +288,9 @@ public class SceneModel implements IAdaptable, IOperationHistoryListener, IScene
                         // Clearing image means texture will be disposed at next access
                         texture.setImage(null);
                     }
+                }
+                if (loaderContext != null) {
+                    loaderContext.removeFromCache(path);
                 }
                 if (handleReload(root, (IFile)resource)) {
                     this.reloaded = true;

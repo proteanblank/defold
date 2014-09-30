@@ -15,8 +15,10 @@ import com.dynamo.bob.TexcLibrary.PixelFormat;
 import com.dynamo.bob.util.TextureUtil;
 import com.dynamo.graphics.proto.Graphics.TextureImage;
 import com.dynamo.graphics.proto.Graphics.TextureImage.TextureFormat;
+import com.dynamo.graphics.proto.Graphics.TextureImage.Type;
 import com.google.protobuf.ByteString;
 import com.sun.jna.Pointer;
+
 
 public class TextureGenerator {
 
@@ -120,6 +122,8 @@ public class TextureGenerator {
             raw.setData(ByteString.copyFrom(buffer));
             raw.setFormat(textureFormat);
             textureBuilder.addAlternatives(raw);
+            textureBuilder.setType(Type.TYPE_2D);
+            textureBuilder.setCount(1);
             return textureBuilder.build();
 
         } finally {
@@ -127,6 +131,4 @@ public class TextureGenerator {
         }
 
     }
-
-
 }

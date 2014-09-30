@@ -3,8 +3,137 @@ Defold
 
 Repository for engine, editor and server.
 
+Code Style
+----------
+
+Follow current code style and use 4 spaces for tabs. Never commit code
+with trailing white-spaces. For Eclipse [AnyEditTools](http://andrei.gmxhome.de/eclipse.html)
+
+Setup
+-----
+
+**Required Software**
+
+* [Java 8 JDK](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
+* [Eclipse 3.8.2](http://archive.eclipse.org/eclipse/downloads/drops/R-3.8.2-201301310800/) (the editor isn't compatible with Eclipse 4.X)
+
+**Eclipse Plugins**
+
+<table>
+<tr>
+<th>Plugin</th>
+<th>Link</th>
+<th>Install</th>
+</tr>
+
+<tr>
+<td>CDT</td>
+<td>http://download.eclipse.org/tools/cdt/releases/juno</td>
+<td>`C/C++ Development Tools`</td>
+</tr>
+
+<tr>
+<td>EclipseLink</td>
+<td>http://download.eclipse.org/rt/eclipselink/updates</td>
+<td>`EclipseLink Target Components`</td>
+</tr>
+
+<tr>
+<td>Google Plugin</td>
+<td>https://dl.google.com/eclipse/plugin/4.2</td>
+<td>
+`Google Plugin for Eclipse`<br/>
+`Google App Engine Java`<br/>
+`Google Web Toolkit SDK`
+</td>
+</tr>
+
+<tr>
+<td>PyDev</td>
+<td>http://pydev.org/updates</td>
+<td>`PyDev for Eclipse`</td>
+</tr>
+</table>
+
+Always launch Eclipse from the **command line** with a development environment
+setup. See `build.py` and the `shell` command below.
+
+**Optional Software**
+
+* [ccache](http://ccache.samba.org) - install with `brew install ccache` on OS X and `sudo apt-get install ccache`
+  on Debian based Linux distributions
+
+**Import Java Projects**
+
+* Import Java projects with `File > Import`
+* Select `General > Existing Projects into Workspace`,
+* Set root directory to `defold/com.dynamo.cr`
+* Select everything apart from `com.dynamo.cr.web` and `com.dynamo.cr.webcrawler`.
+* Ensure that `Copy projects into workspace` is **not** selected
+
+
+**Import Engine Project**
+
+* Create a new C/C++ project
+* Makefile project
+    - `Empty Project`
+    - `-- Other Toolchain --`
+    - Do **not** select `MacOSX GCC` on OS X. Results in out of memory in Eclipse 3.8
+* Use custom project location
+     - `defold/engine`
+* Add `${DYNAMO_HOME}/include`, `${DYNAMO_HOME}/ext/include` and `/usr/include` to project include.
+    - `$DYNAMO_HOME` defaults to `defold/tmp/dynamo_home`
+    - `Project Properties > C/C++ General > Paths and Symbols`
+* Disable `Invalid arguments` in `Preferences > C/C++ > Code Analysis`
+
+
+
+Build Engine
+------------
+
+Setup build environment with `$PATH` and other environment variables.
+
+    $ ./scripts/build.py shell
+
+Install external packages. This step is required once only.
+
+    $ ./scripts/build.py install_ext
+
+Build engine for host target. For other targets use ``--platform=``
+
+    $ ./scripts/build.py build_engine --skip-tests
+
+When the initial build is complete the workflow is to use waf directly. For
+example
+
+    $ cd engine/dlib
+    $ waf
+
+**Unit tests**
+
+Unit tests are run automatically when invoking waf if not --skip-tests is
+specified. A typically workflow when working on a single test is to run
+
+    $ waf --skip-tests && ./build/default/.../test_xxx
+
+With the flag `--gtest_filter=` it's possible to a single test in the suite,
+see [Running a Subset of the Tests](https://code.google.com/p/googletest/wiki/AdvancedGuide#Running_a_Subset_of_the_Tests)
+
+Build and Run Editor
+--------------------
+
+* With a new project invoke `Project > Build All`
+     - Generates Google Protocol Buffers etc
+* Refresh entire workspace
+* Open `cr.product`
+* Press `Launch an Eclipse application`
+* Speed up launch
+    - Go to `Preferences > Run/Debug`
+    - Deselect `Build` in `General Options`
+    - This disables building of custom build steps and explicit invocation of `Project > Build All` is now required.
+
 Licenses
-========
+--------
 
 * **Sony Vectormath Library**: [http://bullet.svn.sourceforge.net/viewvc/bullet/trunk/Extras/vectormathlibrary](http://bullet.svn.sourceforge.net/viewvc/bullet/trunk/Extras/vectormathlibrary) - **BSD**
 * **json**: Based on [https://bitbucket.org/zserge/jsmn/src](https://bitbucket.org/zserge/jsmn/src) - **MIT**
@@ -15,6 +144,7 @@ Licenses
 * **facebook** [https://github.com/facebook/facebook-ios-sdk](https://github.com/facebook/facebook-ios-sdk) **Apache**
 * **glfw** [http://www.glfw.org](http://www.glfw.org) **zlib/libpng**
 * **lua** [http://www.lua.org](http://www.lua.org) **MIT**
+* **luasocket** [http://w3.impa.br/~diego/software/luasocket/](http://w3.impa.br/~diego/software/luasocket/) **MIT**
 * **box2d** [http://box2d.org](http://box2d.org) **zlib**
 * **bullet** [http://bulletphysics.org](http://bulletphysics.org) **zlib**
 * **vp8** [http://www.webmproject.org](http://www.webmproject.org) **BSD**
@@ -101,8 +231,8 @@ From: [http://stackoverflow.com/a/13576028](http://stackoverflow.com/a/13576028)
 Android
 -------
 
-By convention we currently have a weak reference to struct android\_app \* called g\_AndroidApp. 
-g\_AndroidApp is set by glfw and used by dlib. This is more or less a circular dependency. See sys.cpp and android_init.c. 
+By convention we currently have a weak reference to struct android\_app \* called g\_AndroidApp.
+g\_AndroidApp is set by glfw and used by dlib. This is more or less a circular dependency. See sys.cpp and android_init.c.
 Life-cycle support should probably be moved to dlib at some point.
 
 ### Android Resources and R.java
@@ -118,16 +248,31 @@ This is a known limitation on Android.
 
 **NOTE2:** android_native_app_glue.c from the NDK has been modified to fix a back+virtual keyboard bug in OS 4.1 and 4.2, the modified version is in the glfw source.
 
+### Android Bundling with Local Builds
+
+With the above in mind, since it may be desirable to create Android bundles using locally build versions of the editor, we will describe how
+to manually set up content under com.dynamo.cr. Note that this information has been derived from build.py and related scripts, since running
+those has the undesirable side effect of uploading content.
+
+Create apkc, by invoking the following from the root defold directory:
+
+    # go install defold/...
+
+This will result in the production of apkc under “go/bin”. This should be copied to “com.dynamo.cr/com.dynamo.cr.target/lib/<host platform>”.
+
+Copy classes.dex from $DYNAMO_HOME/share/java to com.dynamo.cr/com.dynamo.cr.target/lib.
+
+Copy all content from $DYNAMO_HOME/ext/share/java/res to com.dynamo.cr/com.dynamo.cr.target/res. You should expect to be copying material for
+Facebook and Google Play into this location.
+
 ### Android SDK/NDK
 
 
-* Download SDK Tools 21.1 from here: [http://developer.android.com/sdk/index.html](http://developer.android.com/sdk/index.html).
-  Drill down to *DOWNLOAD FOR OTHER PLATFORMS* and *SDK Tools Only*. Change URL to ...21.1.. 
-  Do not upgrade SDK tools as we rely on the deprecated tool apkbuilder removed in 21.1+
-* Launch android tool and install Android 4.2.2 (API 17). Do **not** upgrade SDK tools as
-  mentioned above
-* Download NDK 8e: [http://developer.android.com/tools/sdk/ndk/index.html](http://developer.android.com/tools/sdk/ndk/index.html)
-* Put NDK/SDK in ~/android/android-ndk-r8e and ~/android/android-sdk respectively 
+* Download SDK Tools 23.0 from here: [http://developer.android.com/sdk/index.html](http://developer.android.com/sdk/index.html).
+  Drill down to *VIEW ALL DOWNLOADS AND SIZES* and *SDK Tools Only*. Change URL to ...23.0.. if necessary.
+* Launch android tool and install Android SDK Platform-tools 20 and Build-tools 20.0
+* Download NDK 10b: [http://developer.android.com/tools/sdk/ndk/index.html](http://developer.android.com/tools/sdk/ndk/index.html)
+* Put NDK/SDK in ~/android/android-ndk-r10b and ~/android/android-sdk respectively
 
 ### Android testing
 
@@ -135,7 +280,7 @@ Copy executable (or directory) with
 
     # adb push <DIR_OR_DIR> /data/local/tmp
 
-When copying directories append directory name to destination path. It's oterhwise skipped
+When copying directories append directory name to destination path. It's otherwise skipped
 
 Run exec with:
 
@@ -145,7 +290,7 @@ For interactive shell run "adb shell"
 
 ### Caveats
 
-If the app is started programatically, the life cycle behaves differently. Deactivating the app and then activating it by clicking on it results in a new 
+If the app is started programatically, the life cycle behaves differently. Deactivating the app and then activating it by clicking on it results in a new
 create message being sent (onCreate/android_main). The normal case is for the app to continue through e.g. onStart.
 
 ### Android debugging
@@ -213,11 +358,11 @@ Some implementation details to note:
 
 E.g. when an APK produces a crash, backing it up is always a good idea before you attempt to fix it.
 
-# Determine package name:
+## Determine package name:
   adb shell pm list packages
-# Get the path on device:
+## Get the path on device:
   adb shell pm path <package-name>
-# Pull the APK to local disk
+## Pull the APK to local disk
   adb pull <package-path>
 
 OpenGL and jogl
@@ -227,11 +372,146 @@ Prior to GLCanvas#setCurrent the GLDrawableFactory must be created on OSX. This 
 
         GLDrawableFactory factory = GLDrawableFactory.getFactory(GLProfile.getGL2ES1());
         this.canvas.setCurrent();
-		this.context = factory.createExternalGLContext();
+        this.context = factory.createExternalGLContext();
 
 Typically the getFactory and createExternalGLContext are in the same statement. The exception thrown is "Error: current Context (CGL) null, no Context (NS)" and might be related to loading of shared libraries that seems to triggered when the factory is
 created. Key is probably that GLCanvas.setCurrnet fails to set current context before the factory is created. The details
 are unknown though.
+
+Emscripten
+----------
+
+**TODO**
+
+* Run all tests
+* In particular (LuaTableTest, Table01) and setjmp
+* Profiler (disable http-server)
+* Non-release (disable engine-service)
+* Verify that exceptions are disabled
+* Alignments. Alignment to natural boundary is required for emscripten. uint16_t to 2, uint32_t to 4, etc
+  However, unaligned loads/stores of floats seems to be valid though.
+* Create a node.js package with uvrun for all platforms (osx, linux and windows)
+
+### Create SDK Packages
+
+* Download [emsdk_portable](http://kripken.github.io/emscripten-site/docs/getting_started/downloads.html)
+* Compile on 32-bit Linux
+* Run `emsdk update` and `emsdk install`
+* On Linux first remove the following directories
+  - `emsdk_portable/clang/fastcomp/src`
+  - Everything **apart** from `emsdk_portable/clang/fastcomp/build_master_32/bin`
+  - Strip debug information from files in `emsdk_portable/clang/fastcomp/build_master_32/bin`
+* Create a tarball of the package
+* Upload packages to s3-bucket `defold-packages`
+
+In order to run on 64-bit Ubuntu install the following packages `lib32z1 lib32ncurses5 lib32bz2-1.0 lib32stdc++6`
+
+### Installation
+
+To install the emscripten tools, invoke 'build.py install_ems'.
+
+Emscripten creates a configuration file in your home directory (~/.emscripten).Should you wish to change branches to one
+in which a different version of these tools is used then call 'build.py activate_ems' after doing so. This will cause the .emscripten file to be updated.
+
+Emscripten also relies upon python2 being on your path. You may find that this is not the case (which python2), it should be sufficient to create a symbolic link to
+the python binary in order to solve this problem.
+
+waf_dynamo contains changes relating to emscripten. The simplest way to collect these changes is to run 'build_ext'
+
+    > scripts/build.py install_ext
+
+Building for js-web requires installation of the emscripten tools. This is a slow process, so not included int install_ext, instead run install_ems:
+
+    > scripts/build.py install_ems
+
+As of 1.22.0, the emscripten tools emit separate *.js.mem memory initialisation files by default, rather than embedding this data directly into files.
+This is more efficient than storing this data as text within the javascript files, however it does add to a new set of files to include in the build process.
+Should you wish to manually update the contents of the editor's engine files (com.dynamo.cr.engine/engine/js-web) then remember to include these items in those
+that you copy. Build scripts have been updated to move these items to the expected location under *DYNAMO HOME* (bin/js-web), as has the copy_dmengine.sh script.
+
+### Running Headless Builds
+
+In order to run headless builds of the engine, take the following steps:
+
+* Ensure that you have installed the [xhr2 node module](https://www.npmjs.org/package/xhr2)
+* Select or create a folder in which to run your test
+* Copy dmengine_headless.js, dmengine_headless.js.mem, game.darc and game.projectc into your folder
+* Run dmengine_headless.js with node.js
+
+Since game.darc and game.projectc are not platform specific, you may copy these from any project bundle built with the same engine version that you wish to
+test against.
+
+When running headless builds, you may also find it useful to install [node-inspector](https://github.com/node-inspector/node-inspector). Note that it operates on
+port 8080 by default, so either close your Defold tools or change this port when running such builds.
+
+To get working keyboard support (until our own glfw is used or glfw is gone):
+- In ~/local/emscripten/src/library\_glfw.js, on row after glfwLoadTextureImage2D: ..., add:
+glfwShowKeyboard: function(show) {},
+
+To use network functionality during development (or until cross origin support is added to QA servers):
+- google-chrome --disable-web-security
+- firefox requires a http proxy which adds the CORS headers to the web server response, and also a modification in the engine is required.
+
+Setting up Corsproxy with defold:
+To install and run the corsproxy on your network interface of choice for example 172.16.11.23:
+```sh
+sudo npm install -g corsproxy
+corsproxy 172.16.11.23
+```
+
+Then, the engine needs a patch to change all XHR:s:
+- remove the line engine/script/src/script_http_js.cpp:
+```
+xhr.open(Pointer_stringify(method), Pointer_stringify(url), true);
+```
+- and add
+```
+var str_url = Pointer_stringify(url);
+str_url = str_url.replace("http://", "http://172.16.11.23:9292/");
+str_url = str_url.replace("https://", "http://172.16.11.23:9292/");
+xhr.open(Pointer_stringify(method), str_url, true);
+```
+
+For faster builds, change in scripts/build.py -O3 to -O1 in CCFLAGS, CXXFLAGS and LINKFLAGS
+To profile in the browser, add -g2 to CCFLAGS, CXXFLAGS and LINKFLAGS. This will cause function names and whitespaces to remain in the js file but also increases the size of the file.
+
+Some flags that is useful for emscripten projects would be to have:
+-s ERROR_ON_UNDEFINED_SYMBOLS=1
+'-fno-rtti'. Can't be used at the moment as gtest requires it, but it would be nice to have enabled
+
+Firefox OS
+----------
+To bundle up a firefox OS app and deploy to a connected firefox OS phone, we need to have a manifest.webapp in the web root directory:
+```
+{
+  "launch_path": "/Keyword.html",
+  "orientation": ["portrait-primary"],
+  "fullscreen": "true",
+  "icons": {
+    "128": "/keyword_120.png"
+  },
+  "name": "Keyword"
+}
+```
+Then use ffdb.py to package, deploy to Firefox OS phone, start on the phone and then tail the log on the phone:
+```
+$EMSCRIPTEN/tools/ffdb.py install . --run --log
+```
+
+Tip is to also use the Firefox App Manager. (in Firefox, press and release Alt) -> Tools -> Web Developer -> App Manager. Click device, then "Connect to localhost:6000" at the bottom of the screen. if it fails, manually run:
+```
+adb forward tcp:6000 localfilesystem:/data/local/debugger-socket
+```
+In that web app manager, you can see the console output, take screenshots or show other web developer options for the phone.
+
+Flash
+-----
+
+**TODO**
+
+* Investigate mutex and dmProfile overhead. Removing DM_PROFILE, DM_COUNTER_HASH, dmMutex::Lock and dmMutex::Unlock from dmMessage::Post resulted in 4x improvement
+* Verify that exceptions are disabled
+
 
 Asset loading
 -------------
@@ -240,12 +520,12 @@ Assets can be loaded from file-system, from an archive or over http.
 
 See *dmResource::LoadResource* for low-level loading of assets, *dmResource* for general resource loading and *engine.cpp*
 for initialization. A current limitation is that we don't have a specific protocol for *resource:* For file-system, archive
-and http url schemes *file:*, *arc:* and *http:* are used respectively. See dmConfigFile for the limitation about the absence 
+and http url schemes *file:*, *arc:* and *http:* are used respectively. See dmConfigFile for the limitation about the absence
 of a resource-scheme.
 
 ### Http Cache
 
-Assets loaded with dmResource are cached locally. A non-standard batch-oriented cache validation mechanism 
+Assets loaded with dmResource are cached locally. A non-standard batch-oriented cache validation mechanism
 used if available in order to speed up the cache-validation process. See dlib, *dmHttpCache* and *ConsistencyPolicy*, for more information.
 
 Engine Extensions
@@ -276,3 +556,11 @@ Energy Consumption
 
       adb shell dumpsys cpuinfo
 
+Eclipse 4.4 issues
+------------------
+
+* ApplicationWorkbenchWindowAdvisor#createWindowContents isn't invoked
+* Shortcuts doens't work in pfx-editor
+* No editor tips
+* Splash-monitor invoked after startup. See SplashHandler.java.
+  Currently protected by if (splashShell == null) ...

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include "res_gui.h"
 #include "../proto/gui_ddf.h"
 #include "../components/comp_gui.h"
@@ -21,8 +22,7 @@ namespace dmGameSystem
         if ( e != dmDDF::RESULT_OK )
             return dmResource::RESULT_FORMAT_ERROR;
 
-
-        if (!dmGameObject::LoadModules(factory, gui_context->m_ScriptContext, dmGui::GetLuaState(gui_context->m_GuiContext), lua_module))
+        if (!dmGameObject::RegisterSubModules(factory, gui_context->m_ScriptContext, lua_module))
         {
             dmDDF::FreeMessage(lua_module);
             return dmResource::RESULT_FORMAT_ERROR;
@@ -58,11 +58,18 @@ namespace dmGameSystem
                                           dmResource::SResourceDescriptor* resource,
                                           const char* filename)
     {
+        GuiContext* gui_context = (GuiContext*)context;
         dmGui::HScript script = (dmGui::HScript)resource->m_Resource;
 
         dmLuaDDF::LuaModule* lua_module = 0;
         dmDDF::Result e = dmDDF::LoadMessage<dmLuaDDF::LuaModule>(buffer, buffer_size, &lua_module);
         if ( e != dmDDF::RESULT_OK ) {
+            return dmResource::RESULT_FORMAT_ERROR;
+        }
+
+        if (!dmGameObject::RegisterSubModules(factory, gui_context->m_ScriptContext, lua_module))
+        {
+            dmDDF::FreeMessage(lua_module);
             return dmResource::RESULT_FORMAT_ERROR;
         }
 

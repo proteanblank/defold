@@ -40,6 +40,8 @@ protected:
     dmGameSystem::SpriteContext m_SpriteContext;
     dmGameSystem::CollectionProxyContext m_CollectionProxyContext;
     dmGameSystem::FactoryContext m_FactoryContext;
+    dmGameSystem::SpineModelContext m_SpineModelContext;
+    dmGameObject::ModuleContext m_ModuleContext;
 };
 
 class ResourceTest : public GamesysTest<const char*>
@@ -86,11 +88,12 @@ void GamesysTest<T>::SetUp()
     params.m_MaxResources = 16;
     params.m_Flags = RESOURCE_FACTORY_FLAGS_RELOAD_SUPPORT;
     m_Factory = dmResource::NewFactory(&params, "build/default/src/gamesys/test");
-    m_ScriptContext = dmScript::NewContext(0, 0);
-    dmGameObject::Initialize(m_ScriptContext, m_Factory);
+    m_ScriptContext = dmScript::NewContext(0, m_Factory);
+    dmScript::Initialize(m_ScriptContext);
+    dmGameObject::Initialize(m_ScriptContext);
     m_Register = dmGameObject::NewRegister();
-    dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-    dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+    dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+    dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
 
     m_GraphicsContext = dmGraphics::NewContext(dmGraphics::ContextParams());
     dmRender::RenderContextParams render_params;
@@ -133,13 +136,17 @@ void GamesysTest<T>::SetUp()
 
     m_FactoryContext.m_MaxFactoryCount = 128;
 
+    m_SpineModelContext.m_RenderContext = m_RenderContext;
+    m_SpineModelContext.m_Factory = m_Factory;
+    m_SpineModelContext.m_MaxSpineModelCount = 32;
+
     assert(dmResource::RESULT_OK == dmGameSystem::RegisterResourceTypes(m_Factory, m_RenderContext, &m_GuiContext, m_InputContext, &m_PhysicsContext));
 
     dmResource::Get(m_Factory, "/input/valid.gamepadsc", (void**)&m_GamepadMapsDDF);
     assert(m_GamepadMapsDDF);
     dmInput::RegisterGamepads(m_InputContext, m_GamepadMapsDDF);
 
-    assert(dmGameObject::RESULT_OK == dmGameSystem::RegisterComponentTypes(m_Factory, m_Register, m_RenderContext, &m_PhysicsContext, &m_ParticleFXContext, &m_GuiContext, &m_SpriteContext, &m_CollectionProxyContext, &m_FactoryContext));
+    assert(dmGameObject::RESULT_OK == dmGameSystem::RegisterComponentTypes(m_Factory, m_Register, m_RenderContext, &m_PhysicsContext, &m_ParticleFXContext, &m_GuiContext, &m_SpriteContext, &m_CollectionProxyContext, &m_FactoryContext, &m_SpineModelContext));
 
     m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
 }
@@ -153,7 +160,8 @@ void GamesysTest<T>::TearDown()
     dmGui::DeleteContext(m_GuiContext.m_GuiContext, m_ScriptContext);
     dmRender::DeleteRenderContext(m_RenderContext, m_ScriptContext);
     dmGraphics::DeleteContext(m_GraphicsContext);
-    dmGameObject::Finalize(m_ScriptContext, m_Factory);
+    dmScript::Finalize(m_ScriptContext);
+    dmScript::DeleteContext(m_ScriptContext);
     dmResource::DeleteFactory(m_Factory);
     dmGameObject::DeleteRegister(m_Register);
     dmSound::Finalize();
@@ -161,5 +169,4 @@ void GamesysTest<T>::TearDown()
     dmHID::Final(m_HidContext);
     dmHID::DeleteContext(m_HidContext);
     dmPhysics::DeleteContext2D(m_PhysicsContext.m_Context2D);
-    dmScript::DeleteContext(m_ScriptContext);
 }

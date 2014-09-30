@@ -49,11 +49,19 @@ TEST_F(EngineTest, Project)
     ASSERT_GT(frame_count, 5u);
 }
 
+TEST_F(EngineTest, SharedLuaState)
+{
+    uint32_t frame_count = 0;
+    const char* argv[] = {"test_engine", "--config=script.shared_state=1", CONTENT_ROOT "/game.projectc"};
+    ASSERT_EQ(0, dmEngine::Launch(3, (char**)argv, 0, PostRunFrameCount, &frame_count));
+    ASSERT_GT(frame_count, 5u);
+}
+
 TEST_F(EngineTest, ArchiveNotFound)
 {
     uint32_t frame_count = 0;
     const char* argv[] = {"test_engine", "--config=resource.uri=arc:not_found.arc", CONTENT_ROOT "/game.projectc"};
-    dmEngine::Launch(2, (char**)argv, 0, PostRunFrameCount, &frame_count);
+    dmEngine::Launch(3, (char**)argv, 0, PostRunFrameCount, &frame_count);
 }
 
 TEST_F(EngineTest, GuiRenderCrash)
@@ -68,6 +76,14 @@ TEST_F(EngineTest, CrossScriptMessaging)
 {
     uint32_t frame_count = 0;
     const char* argv[] = {"test_engine", "--config=bootstrap.main_collection=/cross_script_messaging/main.collectionc", "--config=bootstrap.render=/cross_script_messaging/default.renderc", CONTENT_ROOT "/game.projectc"};
+    ASSERT_EQ(0, dmEngine::Launch(4, (char**)argv, 0, PostRunFrameCount, &frame_count));
+    ASSERT_EQ(frame_count, 1u);
+}
+
+TEST_F(EngineTest, RenderScript)
+{
+    uint32_t frame_count = 0;
+    const char* argv[] = {"test_engine", "--config=bootstrap.main_collection=/render_script/main.collectionc", "--config=bootstrap.render=/render_script/default.renderc", CONTENT_ROOT "/game.projectc"};
     ASSERT_EQ(0, dmEngine::Launch(4, (char**)argv, 0, PostRunFrameCount, &frame_count));
     ASSERT_EQ(frame_count, 1u);
 }

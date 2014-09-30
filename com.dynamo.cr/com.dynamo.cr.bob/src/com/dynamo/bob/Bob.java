@@ -30,6 +30,9 @@ import org.apache.commons.cli.PosixParser;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 
+import com.dynamo.bob.fs.DefaultFileSystem;
+import com.dynamo.bob.util.LibraryUtil;
+
 public class Bob {
 
     private static String texcLibDir = null;
@@ -43,6 +46,9 @@ public class Bob {
         options.addOption("v", "verbose", false, "Verbose output");
         options.addOption("h", "help", false, "This help directory");
         options.addOption("a", "archive", false, "Build archive");
+        options.addOption("c", "compress", false, "Compress archive entries (if -a/--archive)");
+        options.addOption("e", "email", true, "User email");
+        options.addOption("u", "auth", true, "User auth token");
         CommandLineParser parser = new PosixParser();
         CommandLine cmd = null;
         try {
@@ -59,7 +65,7 @@ public class Bob {
         return cmd;
     }
 
-    public static void main(String[] args) throws IOException, CompileExceptionError, URISyntaxException {
+    public static void main(String[] args) throws IOException, CompileExceptionError, URISyntaxException, LibraryException {
         System.setProperty("java.awt.headless", "true");
         String cwd = new File(".").getAbsolutePath();
 
@@ -77,14 +83,32 @@ public class Bob {
         Project project = new Project(new DefaultFileSystem(), rootDirectory, buildDirectory);
         if (cmd.hasOption('a')) {
             project.setOption("build_disk_archive", "true");
+
+            if (cmd.hasOption('c')) {
+                project.setOption("compress_disk_archive_entries", "true");
+            }
+        }
+        if (cmd.hasOption('e')) {
+            project.setOption("email", getOptionsValue(cmd, 'e', null));
+        }
+        if (cmd.hasOption('u')) {
+            project.setOption("auth", getOptionsValue(cmd, 'u', null));
         }
 
         ClassLoaderScanner scanner = new ClassLoaderScanner();
         project.scan(scanner, "com.dynamo.bob");
         project.scan(scanner, "com.dynamo.bob.pipeline");
 
-        Set<String> skipDirs = new HashSet<String>(Arrays.asList(".git", buildDirectory));
+        project.setLibUrls(LibraryUtil.getLibraryUrlsFromProject(FilenameUtils.concat(cwd, rootDirectory)));
+        for (String command : commands) {
+            if (command.equals("resolve")) {
+                project.resolveLibUrls(new ConsoleProgress());
+                break;
+            }
+        }
+        project.mount(new ClassLoaderResourceScanner());
 
+        Set<String> skipDirs = new HashSet<String>(Arrays.asList(".git", buildDirectory, ".internal"));
         project.findSources(sourceDirectory, skipDirs);
         List<TaskResult> result = project.build(new ConsoleProgress(), commands);
         boolean ret = true;
@@ -122,6 +146,7 @@ public class Bob {
             System.out.println("The build failed for the following reasons:");
             System.out.println(errors.toString());
         }
+        project.dispose();
         System.exit(ret ? 0 : 1);
     }
 
@@ -149,44 +174,51 @@ public class Bob {
         return texcLibDir;
     }
 
-    private static String getPlatform() {
+    private enum PlatformType {
+        Windows,
+        Darwin,
+        Linux
+    }
+
+    private static PlatformType getPlatform() {
         String os_name = System.getProperty("os.name").toLowerCase();
 
-        if (os_name.indexOf("win") != -1)
-            return "win32";
-        else if (os_name.indexOf("mac") != -1)
-            return "darwin";
-        else if (os_name.indexOf("linux") != -1)
-            return "linux";
-        return null;
+        if (os_name.indexOf("win") != -1) {
+            return PlatformType.Windows;
+        } else if (os_name.indexOf("mac") != -1) {
+            return PlatformType.Darwin;
+        } else if (os_name.indexOf("linux") != -1) {
+            return PlatformType.Linux;
+        } else {
+            throw new RuntimeException(String.format("Could not identify OS: '%s'", os_name));
+        }
     }
 
     private static void setTexcLibDir() throws URISyntaxException, ZipException, IOException {
         URI uri = getJarURI();
-        String prefix = "";
-        String ext = "";
-        String platform = getPlatform();
-        if (platform.equals("win32")) {
-            ext = ".dll";
-        } else if (platform.equals("darwin")) {
-            prefix = "x86_64-darwin/lib";
-            ext = ".dylib";
-        } else if (platform.equals("linux")) {
-            prefix = "lib";
-            ext = ".so";
+        String libSubPath = null;
+        PlatformType platform = getPlatform();
+        switch (platform) {
+        case Windows:
+            libSubPath = "win32/texc_shared.dll";
+            break;
+        case Darwin:
+            libSubPath = "x86_64-darwin/libtexc_shared.dylib";
+            break;
+        case Linux:
+            libSubPath = "linux/libtexc_shared.so";
+            break;
         }
-        String path = prefix + "texc_shared" + ext;
-        File file = FileUtils.toFile(getFile(uri, path).toURL());
-        if (!file.exists()) {
-            String libPath = uri.getPath() + "lib/";
-            // No platform-qualified path in dev mode (waf install)
-            if (!isDev() && !platform.equals("darwin")) {
-                libPath = libPath.concat(platform);
-            }
-            uri = new File(libPath).toURI();
-            file = FileUtils.toFile(getFile(uri, path).toURL());
+        if (isDev()) {
+            libSubPath = "lib/" + libSubPath;
         }
-        texcLibDir = file.getParentFile().getAbsolutePath();
+
+        File file = FileUtils.toFile(getFile(uri, libSubPath).toURL());
+        if (file.exists()) {
+            texcLibDir = file.getParentFile().getAbsolutePath();
+        } else {
+            throw new IOException(String.format("Could not locate '%s'", libSubPath));
+        }
     }
 
     private static URI getJarURI() throws URISyntaxException {
@@ -294,4 +326,5 @@ public class Bob {
             System.out.println("Bob: " + String.format(message, args));
         }
     }
+
 }

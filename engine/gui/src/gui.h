@@ -260,12 +260,14 @@ namespace dmGui
      * @param scene
      * @param nodes
      * @param node_transforms
+     * @param node_colors
      * @param node_count
      * @param context
      */
     typedef void (*RenderNodes)(HScene scene,
                                HNode* nodes,
                                const Vectormath::Aos::Matrix4* node_transforms,
+                               const Vectormath::Aos::Vector4* node_colors,
                                uint32_t node_count,
                                void* context);
 
@@ -584,6 +586,8 @@ namespace dmGui
     Result SetNodeLayer(HScene scene, HNode node, dmhash_t layer_id);
     Result SetNodeLayer(HScene scene, HNode node, const char* layer_id);
 
+    void SetNodeInheritAlpha(HScene scene, HNode node, bool inherit_alpha);
+
     Result GetTextMetrics(HScene scene, const char* text, const char* font_id, float width, bool line_break, TextMetrics* metrics);
     Result GetTextMetrics(HScene scene, const char* text, dmhash_t font_id, float width, bool line_break, TextMetrics* metrics);
 
@@ -720,6 +724,13 @@ namespace dmGui
      * @return lua state
      */
     lua_State* GetLuaState(HContext context);
+
+    /** Gets the gui scene currently connected to the lua state.
+     * A scene is connected while any of the callbacks in the associated gui script is being run.
+     * @param L lua state
+     * @return current scene, or 0
+     */
+    HScene GetSceneFromLua(lua_State* L);
 }
 
 #endif

@@ -19,7 +19,7 @@ struct VisualObject
     uint16_t                m_FirstCollisionGroup;
 };
 
-void GetWorldTransform(void* visual_object, dmTransform::TransformS1& world_transform);
+void GetWorldTransform(void* visual_object, dmTransform::Transform& world_transform);
 void SetWorldTransform(void* visual_object, const Vectormath::Aos::Point3& position, const Vectormath::Aos::Quat& rotation);
 bool CollisionCallback(void* user_data_a, uint16_t group_a, void* user_data_b, uint16_t group_b, void* user_data);
 bool ContactPointCallback(const dmPhysics::ContactPoint& contact_point, void* user_data);
@@ -94,6 +94,12 @@ struct Funcs
     typedef bool (*IsEnabledFunc)(typename T::CollisionObjectType collision_object);
     typedef void (*SetEnabledFunc)(typename T::WorldType world, typename T::CollisionObjectType collision_object, bool enabled);
     typedef bool (*IsSleepingFunc)(typename T::CollisionObjectType collision_object);
+    typedef void (*SetLockedRotationFunc)(typename T::CollisionObjectType collision_object, bool locked_rotation);
+    typedef float (*GetLinearDampingFunc)(typename T::CollisionObjectType collision_object);
+    typedef void (*SetLinearDampingFunc)(typename T::CollisionObjectType collision_object, float linear_damping);
+    typedef float (*GetAngularDampingFunc)(typename T::CollisionObjectType collision_object);
+    typedef void (*SetAngularDampingFunc)(typename T::CollisionObjectType collision_object, float angular_damping);
+    typedef float (*GetMassFunc)(typename T::CollisionObjectType collision_object);
     typedef void (*RequestRayCastFunc)(typename T::WorldType world, const dmPhysics::RayCastRequest& request);
     typedef void (*SetDebugCallbacks)(typename T::ContextType context, const dmPhysics::DebugCallbacks& callbacks);
     typedef void (*ReplaceShapeFunc)(typename T::ContextType context, typename T::CollisionShapeType old_shape, typename T::CollisionShapeType new_shape);
@@ -137,6 +143,12 @@ struct Test3D
     Funcs<Test3D>::IsEnabledFunc                    m_IsEnabledFunc;
     Funcs<Test3D>::SetEnabledFunc                   m_SetEnabledFunc;
     Funcs<Test3D>::IsSleepingFunc                   m_IsSleepingFunc;
+    Funcs<Test3D>::SetLockedRotationFunc            m_SetLockedRotationFunc;
+    Funcs<Test3D>::GetLinearDampingFunc             m_GetLinearDampingFunc;
+    Funcs<Test3D>::SetLinearDampingFunc             m_SetLinearDampingFunc;
+    Funcs<Test3D>::GetAngularDampingFunc            m_GetAngularDampingFunc;
+    Funcs<Test3D>::SetAngularDampingFunc            m_SetAngularDampingFunc;
+    Funcs<Test3D>::GetMassFunc                      m_GetMassFunc;
     Funcs<Test3D>::RequestRayCastFunc               m_RequestRayCastFunc;
     Funcs<Test3D>::SetDebugCallbacks                m_SetDebugCallbacksFunc;
     Funcs<Test3D>::ReplaceShapeFunc                 m_ReplaceShapeFunc;
@@ -183,6 +195,12 @@ struct Test2D
     Funcs<Test2D>::IsEnabledFunc                    m_IsEnabledFunc;
     Funcs<Test2D>::SetEnabledFunc                   m_SetEnabledFunc;
     Funcs<Test2D>::IsSleepingFunc                   m_IsSleepingFunc;
+    Funcs<Test2D>::SetLockedRotationFunc            m_SetLockedRotationFunc;
+    Funcs<Test2D>::GetLinearDampingFunc             m_GetLinearDampingFunc;
+    Funcs<Test2D>::SetLinearDampingFunc             m_SetLinearDampingFunc;
+    Funcs<Test2D>::GetAngularDampingFunc            m_GetAngularDampingFunc;
+    Funcs<Test2D>::SetAngularDampingFunc            m_SetAngularDampingFunc;
+    Funcs<Test2D>::GetMassFunc                      m_GetMassFunc;
     Funcs<Test2D>::RequestRayCastFunc               m_RequestRayCastFunc;
     Funcs<Test2D>::SetDebugCallbacks                m_SetDebugCallbacksFunc;
     Funcs<Test2D>::ReplaceShapeFunc                 m_ReplaceShapeFunc;
