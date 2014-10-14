@@ -6,7 +6,7 @@ def set_options(opt):
 
 def build(bld):
     obj = bld.new_task_gen(features = 'cxx cstaticlib ddf embed',
-                          includes = '../proto .',
+                          includes = '../proto . ..',
                           target = 'engine',
                           proto_gen_py = True,
                           protoc_includes = '../proto',
@@ -25,6 +25,9 @@ def build(bld):
     if 'android' in bld.env['PLATFORM']:
         sound_lib = 'SOUND OPENAL_SOFT OPENSLES'
         exported_symbols = ['FacebookExt', 'IAPExt', 'PushExt', 'AdTruthExt', 'DefaultSoundDevice']
+    elif 'js-web' in bld.env['PLATFORM']:
+        sound_lib = 'SOUND OPENAL'
+        exported_symbols = ['FacebookExt', 'DefaultSoundDevice', 'NullSoundDevice']
     else:
         sound_lib = 'SOUND OPENAL'
 
@@ -35,8 +38,8 @@ def build(bld):
     activities=[('com.facebook.LoginActivity', ''), ('com.defold.iap.IapActivity', 'android:theme="@android:style/Theme.Translucent.NoTitleBar"')]
     extra_packages = 'com.facebook.android:com.google.android.gms'
     obj = bld.new_task_gen(
-        features = 'cc cxx cprogram apk',
-        uselib = 'ADTRUTHEXT FACEBOOKEXT IAPEXT PUSHEXT RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET LUA SCRIPT EXTENSION HID INPUT PARTICLE DLIB DMGLFW GUI %s X %s' % (sound_lib, additional_libs),
+        features = 'cc cxx cprogram apk web',
+        uselib = 'ADTRUTHEXT FACEBOOKEXT IAPEXT PUSHEXT RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET SCRIPT LUA EXTENSION HID INPUT PARTICLE DLIB DMGLFW GUI %s X %s' % (sound_lib, additional_libs),
         uselib_local = 'engine',
         exported_symbols = exported_symbols,
         includes = '../build ../proto .',
@@ -64,8 +67,8 @@ def build(bld):
         bld.install_files('${PREFIX}/bin/${PLATFORM}', 'dmengine.android/dmengine.apk')
 
     obj = bld.new_task_gen(
-        features = 'cc cxx cprogram apk',
-        uselib = 'ADTRUTHEXT FACEBOOKEXT IAPEXT PUSHEXT RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET LUA SCRIPT EXTENSION HID INPUT PARTICLE DLIB DMGLFW GUI %s X %s' % (sound_lib, additional_libs),
+        features = 'cc cxx cprogram apk web',
+        uselib = 'ADTRUTHEXT FACEBOOKEXT IAPEXT PUSHEXT RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET SCRIPT LUA EXTENSION HID INPUT PARTICLE DLIB DMGLFW GUI %s X %s' % (sound_lib, additional_libs),
         uselib_local = 'engine',
         exported_symbols = exported_symbols,
         includes = '../build ../proto .',
@@ -94,8 +97,8 @@ def build(bld):
         bld.install_files('${PREFIX}/bin/${PLATFORM}', 'dmengine_release.android/dmengine_release.apk')
 
     obj = bld.new_task_gen(
-        features = 'cc cxx cprogram apk',
-        uselib = 'RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS_NULL GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET LUA SCRIPT EXTENSION HID_NULL INPUT PARTICLE GUI SOUND_NULL DLIB DMGLFW X',
+        features = 'cc cxx cprogram apk web',
+        uselib = 'RECORD VPX GAMEOBJECT DDF RESOURCE GAMESYS GRAPHICS_NULL GRAPHICS_UTIL PHYSICS RENDER PLATFORM_SOCKET SCRIPT LUA EXTENSION HID_NULL INPUT PARTICLE GUI SOUND_NULL DLIB DMGLFW X',
         uselib_local = 'engine',
         includes = '../build ../proto .',
         proto_gen_py = True,

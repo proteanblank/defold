@@ -23,10 +23,11 @@ protected:
         params.m_Flags = RESOURCE_FACTORY_FLAGS_EMPTY;
         m_Factory = dmResource::NewFactory(&params, "build/default/src/gameobject/test/component");
         m_ScriptContext = dmScript::NewContext(0, 0);
-        dmGameObject::Initialize(m_ScriptContext, m_Factory);
+        dmScript::Initialize(m_ScriptContext);
+        dmGameObject::Initialize(m_ScriptContext);
         m_Register = dmGameObject::NewRegister();
-        dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-        dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+        dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+        dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
         m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
 
         // Register dummy physical resource type
@@ -97,7 +98,7 @@ protected:
     {
         dmGameObject::DeleteCollection(m_Collection);
         dmGameObject::PostUpdate(m_Register);
-        dmGameObject::Finalize(m_ScriptContext, m_Factory);
+        dmScript::Finalize(m_ScriptContext);
         dmScript::DeleteContext(m_ScriptContext);
         dmResource::DeleteFactory(m_Factory);
         dmGameObject::DeleteRegister(m_Register);
@@ -144,6 +145,7 @@ public:
     dmGameObject::HRegister m_Register;
     dmGameObject::HCollection m_Collection;
     dmResource::HFactory m_Factory;
+    dmGameObject::ModuleContext m_ModuleContext;
 };
 
 template <typename T>
@@ -378,6 +380,35 @@ TEST_F(ComponentTest, TestIndexId)
     ASSERT_EQ(dmHashString64("a"), component_id);
     ASSERT_EQ(dmGameObject::RESULT_COMPONENT_NOT_FOUND, dmGameObject::GetComponentIndex(go, dmHashString64("does_not_exist"), &component_index));
     ASSERT_EQ(dmGameObject::RESULT_COMPONENT_NOT_FOUND, dmGameObject::GetComponentId(go, 2, &component_id));
+    dmGameObject::Delete(m_Collection, go);
+}
+
+static int LuaTestCompType(lua_State* L)
+{
+    int top = lua_gettop(L);
+
+    uintptr_t user_data = 0;
+    dmMessage::URL receiver;
+    dmGameObject::GetComponentUserDataFromLua(L, 1, "a", &user_data, &receiver);
+    assert(user_data == 1);
+
+    assert(top == lua_gettop(L));
+
+    return 0;
+}
+
+TEST_F(ComponentTest, TestComponentType)
+{
+    lua_State* L = dmScript::GetLuaState(m_ScriptContext);
+    lua_pushcfunction(L, LuaTestCompType);
+    lua_setglobal(L, "test_comp_type");
+
+    dmGameObject::HInstance go = dmGameObject::New(m_Collection, "/test_comp_type.goc");
+    dmGameObject::SetIdentifier(m_Collection, go, "test_instance");
+
+    bool ret = dmGameObject::Update(m_Collection, &m_UpdateContext);
+    ASSERT_FALSE(ret);
+
     dmGameObject::Delete(m_Collection, go);
 }
 

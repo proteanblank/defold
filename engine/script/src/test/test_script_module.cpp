@@ -20,19 +20,14 @@ protected:
     virtual void SetUp()
     {
         m_Context = dmScript::NewContext(0, 0);
-
-        L = lua_open();
-        luaL_openlibs(L);
-        dmScript::ScriptParams params;
-        params.m_Context = m_Context;
-        dmScript::Initialize(L, params);
+        dmScript::Initialize(m_Context);
+        L = dmScript::GetLuaState(m_Context);
     }
 
     virtual void TearDown()
     {
-        dmScript::Finalize(L, m_Context);
+        dmScript::Finalize(m_Context);
         dmScript::DeleteContext(m_Context);
-        lua_close(L);
     }
 
     dmScript::HContext m_Context;
@@ -59,7 +54,7 @@ TEST_F(ScriptModuleTest, TestModule)
     const char* script = "module(..., package.seeall)\n function f1()\n return 123\n end\n";
     const char* script_file_name = "x.test_mod";
     ASSERT_FALSE(dmScript::ModuleLoaded(m_Context, script_file_name));
-    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0);
+    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0, dmHashString64(script_file_name));
     ASSERT_EQ(dmScript::RESULT_OK, ret);
     ASSERT_TRUE(dmScript::ModuleLoaded(m_Context, script_file_name));
     ASSERT_TRUE(RunFile(L, "test_module.luac"));
@@ -73,12 +68,12 @@ TEST_F(ScriptModuleTest, TestReload)
     const char* script_reload = "module(..., package.seeall)\n reloaded = 1010\n function f1()\n return 456\n end\n";
     const char* script_file_name = "x.test_mod";
     ASSERT_FALSE(dmScript::ModuleLoaded(m_Context, script_file_name));
-    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0);
+    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0, dmHashString64(script_file_name));
     ASSERT_EQ(dmScript::RESULT_OK, ret);
     ASSERT_TRUE(dmScript::ModuleLoaded(m_Context, script_file_name));
     ASSERT_TRUE(RunFile(L, "test_module.luac"));
 
-    ret = dmScript::ReloadModule(m_Context, L, script_reload, strlen(script_reload), dmHashString64(script_file_name));
+    ret = dmScript::ReloadModule(m_Context, script_reload, strlen(script_reload), dmHashString64(script_file_name));
     ASSERT_EQ(dmScript::RESULT_OK, ret);
     lua_getfield(L, LUA_GLOBALSINDEX, "x");
     lua_getfield(L, -1, "test_mod");
@@ -90,6 +85,22 @@ TEST_F(ScriptModuleTest, TestReload)
     ASSERT_EQ(top, lua_gettop(L));
 }
 
+TEST_F(ScriptModuleTest, TestReloadReturn)
+{
+    int top = lua_gettop(L);
+    const char* script = "local M = {}\nreturn M\n";
+    const char* script_file_name = "x.test_mod";
+    ASSERT_FALSE(dmScript::ModuleLoaded(m_Context, script_file_name));
+    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0, dmHashString64(script_file_name));
+    ASSERT_EQ(dmScript::RESULT_OK, ret);
+    ASSERT_TRUE(dmScript::ModuleLoaded(m_Context, script_file_name));
+
+    ret = dmScript::ReloadModule(m_Context, script, strlen(script), dmHashString64(script_file_name));
+    ASSERT_EQ(dmScript::RESULT_OK, ret);
+
+    ASSERT_EQ(top, lua_gettop(L));
+}
+
 TEST_F(ScriptModuleTest, TestReloadFail)
 {
     int top = lua_gettop(L);
@@ -97,12 +108,12 @@ TEST_F(ScriptModuleTest, TestReloadFail)
     const char* script_reload = "module(..., package.seeall)\n reloaded = -1\n function f1()\n return 123\n en\n"; // NOTE: en instead of end
     const char* script_file_name = "x.test_mod";
     ASSERT_FALSE(dmScript::ModuleLoaded(m_Context, script_file_name));
-    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0);
+    dmScript::Result ret = dmScript::AddModule(m_Context, script, strlen(script), script_file_name, 0, dmHashString64(script_file_name));
     ASSERT_EQ(dmScript::RESULT_OK, ret);
     ASSERT_TRUE(dmScript::ModuleLoaded(m_Context, script_file_name));
     ASSERT_TRUE(RunFile(L, "test_module.luac"));
 
-    ret = dmScript::ReloadModule(m_Context, L, script_reload, strlen(script_reload), dmHashString64(script_file_name));
+    ret = dmScript::ReloadModule(m_Context, script_reload, strlen(script_reload), dmHashString64(script_file_name));
     ASSERT_EQ(dmScript::RESULT_LUA_ERROR, ret);
     lua_getfield(L, LUA_GLOBALSINDEX, "x");
     lua_getfield(L, -1, "test_mod");
@@ -124,7 +135,7 @@ TEST_F(ScriptModuleTest, TestModuleMissing)
 TEST_F(ScriptModuleTest, TestReloadNotLoaded)
 {
     int top = lua_gettop(L);
-    dmScript::Result ret = dmScript::ReloadModule(m_Context, L, "", strlen(""), dmHashString64("not_loaded"));
+    dmScript::Result ret = dmScript::ReloadModule(m_Context, "", strlen(""), dmHashString64("not_loaded"));
     ASSERT_EQ(dmScript::RESULT_MODULE_NOT_LOADED, ret);
     ASSERT_EQ(top, lua_gettop(L));
 }

@@ -3,9 +3,16 @@
 #include <dlib/dstrings.h>
 #include <dlib/log.h>
 #include <dlib/align.h>
+#include <dlib/math.h>
 #include <gtest/gtest.h>
 #include "../script.h"
 #include "test/test_ddf.h"
+
+#include "data/table_cos_v0.dat.embed.h"
+#include "data/table_sin_v0.dat.embed.h"
+#include "data/table_cos_v1.dat.embed.h"
+#include "data/table_sin_v1.dat.embed.h"
+#include "data/table_v818192.dat.embed.h"
 
 extern "C"
 {
@@ -23,19 +30,17 @@ protected:
     {
         accept_panic = false;
         g_LuaTableTest = this;
-        L = lua_open();
-        lua_atpanic(L, &AtPanic);
         m_Context = dmScript::NewContext(0, 0);
-        dmScript::ScriptParams params;
-        params.m_Context = m_Context;
-        dmScript::Initialize(L, params);
+        dmScript::Initialize(m_Context);
+        L = dmScript::GetLuaState(m_Context);
+        lua_atpanic(L, &AtPanic);
         top = lua_gettop(L);
     }
 
     static int AtPanic(lua_State *L)
     {
         if (g_LuaTableTest->accept_panic)
-            longjmp(g_LuaTableTest->env, 0);
+            longjmp(g_LuaTableTest->env, 1);
         dmLogError("Unexpected error: %s", lua_tostring(L, -1));
         exit(5);
         return 0;
@@ -44,36 +49,147 @@ protected:
     virtual void TearDown()
     {
         ASSERT_EQ(top, lua_gettop(L));
-        dmScript::Finalize(L, m_Context);
-        lua_close(L);
+        dmScript::Finalize(m_Context);
         dmScript::DeleteContext(m_Context);
         g_LuaTableTest = 0;
+
     }
 
     char DM_ALIGNED(16) m_Buf[256];
+
     bool accept_panic;
     jmp_buf env;
     int top;
     dmScript::HContext m_Context;
     lua_State* L;
+
 };
 
 TEST_F(LuaTableTest, EmptyTable)
 {
     lua_newtable(L);
-    char buf[2];
+    char buf[8 + 2];
     uint32_t buffer_used = dmScript::CheckTable(L, buf, sizeof(buf), -1);
     // 2 bytes for count
-    ASSERT_EQ(2U, buffer_used);
+    ASSERT_EQ(10U, buffer_used);
     lua_pop(L, 1);
 }
 
-// count (+ align) + n * element-size
-const uint32_t OVERFLOW_BUFFER_SIZE = 2 + 2 + 0xffff * (sizeof(char) + sizeof(char) + sizeof(uint16_t) + sizeof(lua_Number));
+/**
+ * A helper function used when validating serialized data in original or v1 format.
+ */
+typedef double (*TableGenFunc)(double);
+int ReadSerializedTable(lua_State* L, uint8_t* source, uint32_t source_length, TableGenFunc fn, int key_stride)
+{
+    int error = 0;
+    const double epsilon = 1.0e-7f;
+    char* aligned_buf = (char*)source;
+
+    dmScript::PushTable(L, aligned_buf);
+
+    for (uint32_t i=0; i<0xfff; ++i)
+    {
+        lua_pushnumber(L, i * key_stride);
+        lua_gettable(L, -2);
+        EXPECT_EQ(LUA_TNUMBER, lua_type(L, -1));
+        if  (LUA_TNUMBER != lua_type(L, -1))
+        {
+            printf("Invalid key on row %d\n", i);
+        }
+        double value_read = lua_tonumber(L, -1);
+        double value_expected = fn(2.0 * M_PI * (double)i / (double)0xffff);
+        double diff = abs(value_read - value_expected);
+        EXPECT_GT(epsilon, diff);
+        lua_pop(L, 1);
+
+        if (epsilon < diff)
+        {
+            error = 1;
+            break;
+        }
+    }
+
+    lua_pop(L, 1);
+
+    return error;
+}
+
+int ReadUnsupportedVersion(lua_State* L)
+{
+    dmScript::PushTable(L, (const char*)TABLE_V818192_DAT);
+    return 1;
+}
+
+
+// The v0.0 tables were generated with dense keys.
+int ReadCosTableDataOriginal(lua_State* L)
+{
+    return ReadSerializedTable(L, TABLE_COS_V0_DAT, TABLE_COS_V0_DAT_SIZE, cos, 1);
+}
+
+int ReadSinTableDataOriginal(lua_State* L)
+{
+    return ReadSerializedTable(L, TABLE_SIN_V0_DAT, TABLE_SIN_V0_DAT_SIZE, sin, 1);
+}
+
+TEST_F(LuaTableTest, AttemptReadUnsupportedVersion)
+{
+    int result = lua_cpcall(L, ReadUnsupportedVersion, 0x0);
+    ASSERT_NE(0, result);
+    char str[256];
+    DM_SNPRINTF(str, sizeof(str), "Unsupported serialized table data: version = 0x%x (current = 0x%x)", 818192, 1);
+    ASSERT_STREQ(str, lua_tostring(L, -1));
+    // pop error message
+    lua_pop(L, 1);
+}
+
+TEST_F(LuaTableTest, VerifyCosTableOriginal)
+{
+    int result = lua_cpcall(L, ReadCosTableDataOriginal, 0x0);
+    ASSERT_EQ(0, result);
+}
+
+TEST_F(LuaTableTest, VerifySinTableOriginal)
+{
+    int result = lua_cpcall(L, ReadSinTableDataOriginal, 0x0);
+    ASSERT_EQ(0, result);
+}
+
+
+// The v1 tables were generated with sparse keys: every other integer over the defined range.
+int ReadCosTableDataVersion01(lua_State* L)
+{
+    return ReadSerializedTable(L, TABLE_COS_V1_DAT, TABLE_COS_V1_DAT_SIZE, cos, 2);
+}
+
+
+int ReadSinTableDataVersion01(lua_State* L)
+{
+    return ReadSerializedTable(L, TABLE_SIN_V1_DAT, TABLE_SIN_V1_DAT_SIZE, sin, 2);
+}
+
+TEST_F(LuaTableTest, VerifyCosTable01)
+{
+    int result = lua_cpcall(L, ReadCosTableDataVersion01, 0x0);
+    ASSERT_EQ(0, result);
+}
+
+TEST_F(LuaTableTest, VerifySinTable01)
+{
+    int result = lua_cpcall(L, ReadSinTableDataVersion01, 0x0);
+    ASSERT_EQ(0, result);
+}
+
+// header + count (+ align) + n * element-size (overestimate)
+const uint32_t OVERFLOW_BUFFER_SIZE = 8 + 2 + 2 + 0xffff * (sizeof(char) + sizeof(char) + sizeof(char) * 6 + sizeof(lua_Number));
+char* g_DynamicBuffer = 0x0;
 
 int ProduceOverflow(lua_State *L)
 {
-    char buf[OVERFLOW_BUFFER_SIZE];
+    char* const buf = g_DynamicBuffer;
+    char* aligned_buf = (char*)(((intptr_t)buf + sizeof(float)-1) & ~(sizeof(float)-1));
+    int size = OVERFLOW_BUFFER_SIZE - (aligned_buf - buf);
+
     lua_newtable(L);
     // too many iterations
     for (uint32_t i = 0; i <= 0xffff; ++i)
@@ -85,14 +201,17 @@ int ProduceOverflow(lua_State *L)
         // store pair
         lua_settable(L, -3);
     }
-    uint32_t buffer_used = dmScript::CheckTable(L, buf, OVERFLOW_BUFFER_SIZE, -1);
+    uint32_t buffer_used = dmScript::CheckTable(L, aligned_buf, size, -1);
     // expect it to fail, avoid warning
     (void)buffer_used;
+
     return 1;
 }
 
 TEST_F(LuaTableTest, Overflow)
 {
+    g_DynamicBuffer = new char[OVERFLOW_BUFFER_SIZE];
+
     int result = lua_cpcall(L, ProduceOverflow, 0x0);
     // 2 bytes for count
     ASSERT_NE(0, result);
@@ -101,16 +220,19 @@ TEST_F(LuaTableTest, Overflow)
     ASSERT_STREQ(expected_error, lua_tostring(L, -1));
     // pop error message
     lua_pop(L, 1);
+
+    delete[] g_DynamicBuffer;
+    g_DynamicBuffer = 0x0;
 }
 
-const uint32_t IOOB_BUFFER_SIZE = 2 + 2 + (sizeof(char) + sizeof(char) + sizeof(uint16_t) + sizeof(lua_Number));
+const uint32_t IOOB_BUFFER_SIZE = 8 + 2 + 2 + (sizeof(char) + sizeof(char) + 5 * sizeof(char) + sizeof(lua_Number));
 
 int ProduceIndexOutOfBounds(lua_State *L)
 {
     char buf[IOOB_BUFFER_SIZE];
     lua_newtable(L);
     // invalid key
-    lua_pushnumber(L, 0xffff+1);
+    lua_pushnumber(L, 0xffffffffLL+1);
     // value
     lua_pushnumber(L, 0);
     // store pair
@@ -127,7 +249,7 @@ TEST_F(LuaTableTest, IndexOutOfBounds)
     // 2 bytes for count
     ASSERT_NE(0, result);
     char expected_error[64];
-    DM_SNPRINTF(expected_error, 64, "index out of bounds, max is %d", 0xffff);
+    DM_SNPRINTF(expected_error, 64, "index out of bounds, max is %d", 0xffffffff);
     ASSERT_STREQ(expected_error, lua_tostring(L, -1));
     // pop error message
     lua_pop(L, 1);
@@ -493,6 +615,30 @@ static void RandomString(char* s, int max_len)
     *s = '\0';
 }
 
+#if defined(__GNUC__)
+#define NO_INLINE __attribute__ ((noinline))
+#elif defined(_MSC_VER)
+#define NO_INLINE __declspec(noinline)
+#else
+#error "Unsupported compiler: cannot specify 'noinline'."
+#endif
+
+//This is a helper function for working around an emscripten bug. See comment in the test "LuaTableTest Stress"
+NO_INLINE void wrapSetJmp(lua_State *L, jmp_buf &env, char *buf, int buf_size){
+    int ret = setjmp(env);
+    if (ret == 0)
+    {
+        uint32_t buffer_used = dmScript::CheckTable(L, buf, buf_size, -1);
+        (void) buffer_used;
+
+
+        dmScript::PushTable(L, buf);
+        lua_pop(L, 1);
+    }
+}
+
+#undef NO_INLINE
+
 TEST_F(LuaTableTest, Stress)
 {
     accept_panic = true;
@@ -535,20 +681,15 @@ TEST_F(LuaTableTest, Stress)
 
                 lua_settable(L, -3);
             }
-            char* buf = new char[buf_size];
+            // Add eight to ensure there is room for the header too.
+            char* buf = new char[8 + buf_size];
 
-            bool check_ok = false;
-            int ret = setjmp(env);
-            if (ret == 0)
-            {
-                uint32_t buffer_used = dmScript::CheckTable(L, buf, buf_size, -1);
-                check_ok = true;
-                (void) buffer_used;
-
-
-                dmScript::PushTable(L, buf);
-                lua_pop(L, 1);
-            }
+            // Emscripten fastcomp does not support calling setjmp over and over like in this loop.
+            // It requires the function calling setjump not to call setjmp more than 10 times before returning.
+            // See emscripten bug https://github.com/kripken/emscripten/issues/2379
+            // According on the comments of the task, this seems to be solved in 1.21.1 of emscripten.
+            // As soon as that appears in emsdk list, we should upgrade and remove this work around.
+            wrapSetJmp(L, env, buf, buf_size);
             lua_pop(L, 1);
 
             delete[] buf;

@@ -123,11 +123,7 @@ static void RunStateCallback(Command* cmd)
         lua_pushnumber(L, (lua_Number) state);
         PushError(L, error);
 
-        int ret = lua_pcall(L, 3, LUA_MULTRET, 0);
-        if (ret != 0) {
-            dmLogError("Error running facebook callback: %s", lua_tostring(L,-1));
-            lua_pop(L, 1);
-        }
+        int ret = dmScript::PCall(L, 3, LUA_MULTRET);
         assert(top == lua_gettop(L));
         luaL_unref(L, LUA_REGISTRYINDEX, callback);
     } else {
@@ -161,11 +157,7 @@ static void RunCallback(Command* cmd)
 
         PushError(L, error);
 
-        int ret = lua_pcall(L, 2, LUA_MULTRET, 0);
-        if (ret != 0) {
-            dmLogError("Error running facebook callback: %s", lua_tostring(L,-1));
-            lua_pop(L, 1);
-        }
+        int ret = dmScript::PCall(L, 2, LUA_MULTRET);
         assert(top == lua_gettop(L));
         luaL_unref(L, LUA_REGISTRYINDEX, callback);
     } else {
@@ -208,11 +200,7 @@ static void RunDialogResultCallback(Command* cmd)
 
         PushError(L, error);
 
-        int ret = lua_pcall(L, 3, LUA_MULTRET, 0);
-        if (ret != 0) {
-            dmLogError("Error running facebook callback: %s", lua_tostring(L,-1));
-            lua_pop(L, 1);
-        }
+        int ret = dmScript::PCall(L, 3, LUA_MULTRET);
         assert(top == lua_gettop(L));
         luaL_unref(L, LUA_REGISTRYINDEX, callback);
     } else {
@@ -291,7 +279,7 @@ JNIEXPORT void JNICALL Java_com_dynamo_android_facebook_FacebookJNI_onLogin
     Command cmd;
     cmd.m_Type = CMD_LOGIN;
     cmd.m_State = (int)state;
-    cmd.m_L = (lua_State*)userData;
+    cmd.m_L = dmScript::GetMainThread((lua_State*)userData);
     cmd.m_Error = StrDup(env, error);
     PostToCallback(&cmd);
 }
@@ -301,7 +289,7 @@ JNIEXPORT void JNICALL Java_com_dynamo_android_facebook_FacebookJNI_onRequestRea
 {
     Command cmd;
     cmd.m_Type = CMD_REQUEST_READ;
-    cmd.m_L = (lua_State*)userData;
+    cmd.m_L = dmScript::GetMainThread((lua_State*)userData);
     cmd.m_Error = StrDup(env, error);
     PostToCallback(&cmd);
 }
@@ -311,7 +299,7 @@ JNIEXPORT void JNICALL Java_com_dynamo_android_facebook_FacebookJNI_onRequestPub
 {
     Command cmd;
     cmd.m_Type = CMD_REQUEST_PUBLISH;
-    cmd.m_L = (lua_State*)userData;
+    cmd.m_L = dmScript::GetMainThread((lua_State*)userData);
     cmd.m_Error = StrDup(env, error);
     PostToCallback(&cmd);
 }
@@ -321,7 +309,7 @@ JNIEXPORT void JNICALL Java_com_dynamo_android_facebook_FacebookJNI_onDialogComp
 {
     Command cmd;
     cmd.m_Type = CMD_DIALOG_COMPLETE;
-    cmd.m_L = (lua_State*)userData;
+    cmd.m_L = dmScript::GetMainThread((lua_State*)userData);
     cmd.m_Url = StrDup(env, url);
     cmd.m_Error = StrDup(env, error);
     PostToCallback(&cmd);
@@ -563,7 +551,7 @@ int Facebook_ShowDialog(lua_State* L)
     char params_json[1024];
     params_json[0] = '{';
     params_json[1] = '\0';
-    char tmp[128];
+    char tmp[256];
 
     lua_pushnil(L);
     int i = 0;

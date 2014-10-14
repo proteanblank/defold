@@ -21,25 +21,16 @@ protected:
 protected:
     virtual void SetUp()
     {
-        L = lua_open();
-
-        luaopen_base(L);
-        luaopen_table(L);
-        luaopen_string(L);
-        luaopen_math(L);
-        luaopen_debug(L);
-
         m_Context = dmScript::NewContext(0, 0);
-        dmScript::ScriptParams params;
-        params.m_Context = m_Context;
-        dmScript::Initialize(L, params);
+        dmScript::Initialize(m_Context);
+
+        L = dmScript::GetLuaState(m_Context);
     }
 
     virtual void TearDown()
     {
-        dmScript::Finalize(L, m_Context);
+        dmScript::Finalize(m_Context);
         dmScript::DeleteContext(m_Context);
-        lua_close(L);
     }
 
     dmScript::HContext m_Context;
@@ -90,12 +81,10 @@ TEST_F(ScriptHashTest, TestHash)
     ASSERT_EQ(LUA_TFUNCTION, lua_type(L, -1));
     dmScript::PushHash(L, hash);
     lua_pushstring(L, hash_hex);
-    int result = lua_pcall(L, 2, LUA_MULTRET, 0);
+    int result = dmScript::PCall(L, 2, LUA_MULTRET);
     if (result == LUA_ERRRUN)
     {
-        dmLogError("Error running script: %s", lua_tostring(L,-1));
         ASSERT_TRUE(false);
-        lua_pop(L, 1);
     }
     else
     {

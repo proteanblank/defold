@@ -260,12 +260,14 @@ namespace dmGui
      * @param scene
      * @param nodes
      * @param node_transforms
+     * @param node_colors
      * @param node_count
      * @param context
      */
     typedef void (*RenderNodes)(HScene scene,
                                HNode* nodes,
                                const Vectormath::Aos::Matrix4* node_transforms,
+                               const Vectormath::Aos::Vector4* node_colors,
                                uint32_t node_count,
                                void* context);
 
@@ -584,6 +586,8 @@ namespace dmGui
     Result SetNodeLayer(HScene scene, HNode node, dmhash_t layer_id);
     Result SetNodeLayer(HScene scene, HNode node, const char* layer_id);
 
+    void SetNodeInheritAlpha(HScene scene, HNode node, bool inherit_alpha);
+
     Result GetTextMetrics(HScene scene, const char* text, const char* font_id, float width, bool line_break, TextMetrics* metrics);
     Result GetTextMetrics(HScene scene, const char* text, dmhash_t font_id, float width, bool line_break, TextMetrics* metrics);
 
@@ -600,31 +604,13 @@ namespace dmGui
     void SetNodeAdjustMode(HScene scene, HNode node, AdjustMode adjust_mode);
 
     /**
-     * Animate node vector property. Internally multiple tracks are created.
-     * This function is obsolete in favor for AnimateNodeHash
+     * Convenience method, converting a dmGui::Property value into a hash value suitable for use
+     * in animation.
      *
-     * @param scene
-     * @param node
-     * @param property
-     * @param to
-     * @param easing
-     * @param playback
-     * @param duration
-     * @param delay
-     * @param animation_complete
-     * @param userdata1
-     * @param userdata2
+     * @param property - the property value to be translated must be within the range PROPERTY_POSITION, PROPERTY_SHADOW
+     * @return a hash value for valid properties or zero otherwise.
      */
-    void AnimateNode(HScene scene, HNode node,
-                     Property property,
-                     const Vector4& to,
-                     dmEasing::Type easing,
-                     Playback playback,
-                     float duration,
-                     float delay,
-                     AnimationComplete animation_complete,
-                     void* userdata1,
-                     void* userdata2);
+    dmhash_t GetPropertyHash(Property property);
 
     /**
      * Animate property. The property parameter is the hash value of the property to animate.
@@ -655,7 +641,6 @@ namespace dmGui
                          void* userdata1,
                          void* userdata2);
 
-    void CancelAnimation(HScene scene, HNode node, Property property);
     void CancelAnimationHash(HScene scene, HNode node, dmhash_t property_hash);
 
     /** determines if a node can be picked
@@ -720,6 +705,13 @@ namespace dmGui
      * @return lua state
      */
     lua_State* GetLuaState(HContext context);
+
+    /** Gets the gui scene currently connected to the lua state.
+     * A scene is connected while any of the callbacks in the associated gui script is being run.
+     * @param L lua state
+     * @return current scene, or 0
+     */
+    HScene GetSceneFromLua(lua_State* L);
 }
 
 #endif

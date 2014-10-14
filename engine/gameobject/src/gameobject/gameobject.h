@@ -95,6 +95,8 @@ namespace dmGameObject
         PROPERTY_RESULT_COMP_NOT_FOUND = -5,
         PROPERTY_RESULT_INVALID_INSTANCE = -6,
         PROPERTY_RESULT_BUFFER_OVERFLOW = -7,
+        PROPERTY_RESULT_UNSUPPORTED_VALUE = -8,
+        PROPERTY_RESULT_UNSUPPORTED_OPERATION = -9
     };
 
     /**
@@ -221,6 +223,8 @@ namespace dmGameObject
         PropertyVar m_Variant;
         /// Pointer to the value, only set for mutable values. The actual data type is described by the variant.
         float* m_ValuePtr;
+        /// Determines whether we are permitted to write to this property.
+        bool m_ReadOnly;
     };
 
     /**
@@ -499,6 +503,8 @@ namespace dmGameObject
      */
     struct ComponentGetPropertyParams
     {
+        /// Context for the component type
+        void* m_Context;
         /// Game object instance
         HInstance m_Instance;
         /// Id of the property
@@ -517,6 +523,8 @@ namespace dmGameObject
      */
     struct ComponentSetPropertyParams
     {
+        /// Context for the component type
+        void* m_Context;
         /// Game object instance
         HInstance m_Instance;
         /// Id of the property
@@ -564,19 +572,8 @@ namespace dmGameObject
     /**
      * Initialize system
      * @param context Script context
-     * @param factory Factory
-     * @note By convention the same factory passed here should be used when loading
-     * collections and other resource using dmResource::Get. The GameObject-system
-     * relies on this fact. Lua modules and perhaps other resources.
      */
-    void Initialize(dmScript::HContext context, dmResource::HFactory factory);
-
-    /**
-     * Finalize system
-     * @param context Script context
-     * @param factory Factory
-     */
-    void Finalize(dmScript::HContext context, dmResource::HFactory factory);
+    void Initialize(dmScript::HContext context);
 
     /**
      * Create a new component type register
@@ -699,6 +696,15 @@ namespace dmGameObject
     Result SetIdentifier(HCollection collection, HInstance instance, const char* identifier);
 
     /**
+     * Set instance identifier. Must be unique within the collection.
+     * @param collection Collection
+     * @param instance Instance
+     * @param identifier Identifier
+     * @return RESULT_OK on success
+     */
+    Result SetIdentifier(HCollection collection, HInstance instance, dmhash_t identifier);
+
+    /**
      * Get instance identifier
      * @param instance Instance
      * @return Identifier. dmGameObject::UNNAMED_IDENTIFIER if not set.
@@ -724,18 +730,24 @@ namespace dmGameObject
      */
     HInstance GetInstanceFromIdentifier(HCollection collection, dmhash_t identifier);
 
-    // TODO: We should have expected component-type here but currently it's difficult to find
-    // componen-type from lua. See case 1998
     /**
      * Get gameobject instance from lua-argument. This function is typically used from lua-bindings
      * and can only be used from protected lua-calls as luaL_error might be invoked
      * @param L lua-state
      * @param index index to argument
-     * @param user_data component user-date output if available
-     * @param url instance url. ignored if null
-     * @return instance
+     * @param component_ext when specified, the call will fail if the found component does not have the specified extension
+     * @param user_data will be overwritten component user-data output if available
+     * @param url will be overwritten with a URL to the component when specified
      */
-    HInstance GetInstanceFromLua(lua_State* L, int index, uintptr_t* user_data, dmMessage::URL* url);
+    void GetComponentUserDataFromLua(lua_State* L, int index, const char* component_ext, uintptr_t* out_user_data, dmMessage::URL* out_url);
+
+    /**
+     * Get current game object instance from the lua state, if any.
+     * The lua state has an instance while the script callbacks are being run on the state.
+     * @param L lua-state
+     * @return current game object instance
+     */
+    HInstance GetInstanceFromLua(lua_State* L);
 
     /**
      * Get component index from component identifier. This function has complexity O(n), where n is the number of components of the instance.
@@ -761,6 +773,32 @@ namespace dmGameObject
      * @return if the scale should be applied along Z
      */
     bool ScaleAlongZ(HInstance instance);
+
+    /**
+     * Set whether the instance should inherit the scale from its parent or not.
+     * @param instance Instance
+     * @param inherit_scale true if the instance should inherit scale
+     */
+    void SetInheritScale(HInstance instance, bool inherit_scale);
+
+    /**
+     * Set whether the instance should be flagged as a bone.
+     * Instances flagged as bones can have their transforms updated in a batch through SetBoneTransforms.
+     * Used for animated skeletons.
+     * @param instance Instance
+     * @param bone true if the instance is a bone
+     */
+    void SetBone(HInstance instance, bool bone);
+
+    /**
+     * Set the local transforms recursively of all instances flagged as bones under the given parent instance.
+     * The order of the transforms is depth-first.
+     * @param parent Parent instance of the hierarchy to set
+     * @param transforms Array of transforms to set depth-first for the bone instances
+     * @param transform_count Size of the transforms array
+     * @return Number of instances found
+     */
+    uint32_t SetBoneTransforms(HInstance parent, dmTransform::Transform* transforms, uint32_t transform_count);
 
     /**
      * Initializes all game object instances in the supplied collection.
@@ -879,6 +917,13 @@ namespace dmGameObject
     void SetScale(HInstance instance, float scale);
 
     /**
+     * Set gameobject instance non-uniform scale
+     * @param instance Gameobject instance
+     * @param scale New uniform scale
+     */
+    void SetScale(HInstance instance, Vector3 scale);
+
+    /**
      * Get gameobject instance uniform scale
      * @param instance Gameobject instance
      * @return Uniform scale
@@ -911,7 +956,7 @@ namespace dmGameObject
      * @param instance Game object instance
      * @return World uniform scale
      */
-    const dmTransform::TransformS1& GetWorldTransform(HInstance instance);
+    const dmTransform::Transform& GetWorldTransform(HInstance instance);
 
     /**
      * Set parent instance to child
@@ -1009,23 +1054,29 @@ namespace dmGameObject
      */
     void CancelAnimations(HCollection collection, HInstance instance);
 
+    struct ModuleContext
+    {
+        dmArray<dmScript::HContext> m_ScriptContexts;
+    };
+
     /**
      * Register all resource types in resource factory
      * @param factory Resource factory
      * @param regist Register
+     * @param script_context Script context
+     * @param module_context Module context, must be persistent throughout the application
      * @return dmResource::Result
      */
-    dmResource::Result RegisterResourceTypes(dmResource::HFactory factory, HRegister regist);
+    dmResource::Result RegisterResourceTypes(dmResource::HFactory factory, HRegister regist, dmScript::HContext script_context, ModuleContext* module_context);
 
     /**
      * Register all component types in collection
      * @param factory Resource factory
      * @param regist Register
+     * @param script_context Script context
      * @return Result
      */
-    Result RegisterComponentTypes(dmResource::HFactory factory, HRegister regist);
-
-    lua_State* GetLuaState();
+    Result RegisterComponentTypes(dmResource::HFactory factory, HRegister regist, dmScript::HContext script_context);
 
 }
 

@@ -22,10 +22,11 @@ protected:
         params.m_Flags = RESOURCE_FACTORY_FLAGS_EMPTY;
         m_Factory = dmResource::NewFactory(&params, "build/default/src/gameobject/test/collection");
         m_ScriptContext = dmScript::NewContext(0, 0);
-        dmGameObject::Initialize(m_ScriptContext, m_Factory);
+        dmScript::Initialize(m_ScriptContext);
+        dmGameObject::Initialize(m_ScriptContext);
         m_Register = dmGameObject::NewRegister();
-        dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-        dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+        dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+        dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
         m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
     }
 
@@ -33,7 +34,7 @@ protected:
     {
         dmGameObject::DeleteCollection(m_Collection);
         dmGameObject::PostUpdate(m_Register);
-        dmGameObject::Finalize(m_ScriptContext, m_Factory);
+        dmScript::Finalize(m_ScriptContext);
         dmScript::DeleteContext(m_ScriptContext);
         dmResource::DeleteFactory(m_Factory);
         dmGameObject::DeleteRegister(m_Register);
@@ -45,6 +46,7 @@ public:
     dmGameObject::HRegister m_Register;
     dmGameObject::HCollection m_Collection;
     dmResource::HFactory m_Factory;
+    dmGameObject::ModuleContext m_ModuleContext;
 };
 
 TEST_F(CollectionTest, Collection)
@@ -195,10 +197,11 @@ TEST_F(CollectionTest, DefaultValues)
     dmGameObject::HCollection coll;
     dmResource::Result r = dmResource::Get(m_Factory, "/defaults.collectionc", (void**) &coll);
     ASSERT_EQ(dmResource::RESULT_OK, r);
-    ASSERT_EQ(2U, coll->m_LevelInstanceCount[0]);
-    for (uint32_t i = 0; i < coll->m_LevelInstanceCount[0]; ++i)
+    uint32_t instance_count = coll->m_LevelIndices[0].Size();
+    ASSERT_EQ(2U, instance_count);
+    for (uint32_t i = 0; i < instance_count; ++i)
     {
-        dmGameObject::HInstance instance = coll->m_Instances[coll->m_LevelIndices[i]];
+        dmGameObject::HInstance instance = coll->m_Instances[coll->m_LevelIndices[0][i]];
         ASSERT_NE((void*)0, instance);
         Vectormath::Aos::Point3 p = dmGameObject::GetPosition(instance);
         ASSERT_EQ(0.0f, p.getX());

@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include "script.h"
-#include "test/test_ddf.h"
 
 #include <dlib/configfile.h>
 #include <dlib/dstrings.h>
@@ -10,7 +9,7 @@
 #include <dlib/time.h>
 #include <dlib/socket.h>
 #include <dlib/thread.h>
-#include <dlib/web_server.h>
+#include <dlib/sys.h>
 
 extern "C"
 {
@@ -20,31 +19,36 @@ extern "C"
 
 #define PATH_FORMAT "build/default/src/test/%s"
 
-dmhash_t ResolvePathCallback(uintptr_t user_data, const char* path, uint32_t path_size)
+#define DEFAULT_URL "__default_url"
+
+int ResolvePathCallback(lua_State* L)
 {
-    return dmHashBuffer64(path, path_size);
+    uint32_t* user_data = (uint32_t*)lua_touserdata(L, 1);
+    assert(*user_data == 1);
+    const char* path = luaL_checkstring(L, 2);
+    dmScript::PushHash(L, dmHashString64(path));
+    return 1;
 }
 
-void GetURLCallback(lua_State* L, dmMessage::URL* url)
+int GetURLCallback(lua_State* L)
 {
-    lua_getglobal(L, "__default_url");
-    *url = *dmScript::CheckURL(L, -1);
-    lua_pop(L, 1);
+    uint32_t* user_data = (uint32_t*)lua_touserdata(L, 1);
+    assert(*user_data == 1);
+    lua_getglobal(L, DEFAULT_URL);
+    return 1;
 }
 
-uintptr_t GetUserDataCallback(lua_State* L)
+static const luaL_reg META_TABLE[] =
 {
-    lua_getglobal(L, "__default_url");
-    uintptr_t default_url = (uintptr_t)dmScript::CheckURL(L, -1);
-    lua_pop(L, 1);
-    return default_url;
-}
+    {dmScript::META_TABLE_RESOLVE_PATH, ResolvePathCallback},
+    {dmScript::META_TABLE_GET_URL,      GetURLCallback},
+    {0, 0}
+};
 
 class ScriptHttpTest : public ::testing::Test
 {
 public:
     int m_HttpResponseCount;
-    dmWebServer::HServer m_WebServer;
     uint16_t m_WebServerPort;
     dmScript::HContext m_ScriptContext;
     lua_State* L;
@@ -53,77 +57,47 @@ public:
 
 protected:
 
-    static void Handler(void* user_data, dmWebServer::Request* request)
-    {
-        char buf[1024];
-
-        if (strcmp(request->m_Resource, "/") == 0) {
-            if (strcmp(request->m_Method, "GET") == 0) {
-                const char* a = dmWebServer::GetHeader(request, "X-A");
-                const char* b = dmWebServer::GetHeader(request, "X-B");
-                if (a && b) {
-                    DM_SNPRINTF(buf, sizeof(buf), "Hello %s%s", a, b);
-                } else {
-                    DM_SNPRINTF(buf, sizeof(buf), "Hello");
-                }
-                dmWebServer::Send(request, buf, strlen(buf));
-            } else {
-                // POST
-                uint32_t received = 0;
-                dmWebServer::Result r = dmWebServer::Receive(request, buf, request->m_ContentLength, &received);
-                if (r == dmWebServer::RESULT_OK) {
-                    dmWebServer::Send(request, "PONG ", 4);
-                    dmWebServer::Send(request, buf, received);
-                }
-            }
-        } else if (strcmp(request->m_Resource, "/sleep") == 0) {
-            dmTime::Sleep(2000 * 1000);
-        } else {
-            dmWebServer::SetStatusCode(request, 404);
-        }
-    }
-
     virtual void SetUp()
     {
         dmConfigFile::Result r = dmConfigFile::Load("src/test/test.config", 0, 0, &m_ConfigFile);
         ASSERT_EQ(dmConfigFile::RESULT_OK, r);
 
         m_HttpResponseCount = 0;
-        L = lua_open();
-        luaL_openlibs(L);
+
         m_ScriptContext = dmScript::NewContext(m_ConfigFile, 0);
-        dmScript::ScriptParams params;
-        params.m_Context = m_ScriptContext;
-        params.m_ResolvePathCallback = ResolvePathCallback;
-        params.m_GetURLCallback = GetURLCallback;
-        params.m_GetUserDataCallback = GetUserDataCallback;
-        dmScript::Initialize(L, params);
+        dmScript::Initialize(m_ScriptContext);
+        L = dmScript::GetLuaState(m_ScriptContext);
 
         ASSERT_EQ(dmMessage::RESULT_OK, dmMessage::NewSocket("default_socket", &m_DefaultURL.m_Socket));
         m_DefaultURL.m_Path = dmHashString64("default_path");
         m_DefaultURL.m_Fragment = dmHashString64("default_fragment");
         dmScript::PushURL(L, m_DefaultURL);
-        lua_setglobal(L, "__default_url");
 
-        dmWebServer::NewParams web_params;
-        dmWebServer::Result wr = dmWebServer::New(&web_params, &m_WebServer);
-        ASSERT_EQ(dmWebServer::RESULT_OK, wr);
-        dmWebServer::HandlerParams handler_params;
-        handler_params.m_Handler = &Handler;
-        handler_params.m_Userdata = this;
-        dmWebServer::AddHandler(m_WebServer, "/", &handler_params);
-        dmSocket::Address address;
-        dmWebServer::GetName(m_WebServer, &address, &m_WebServerPort);
+        lua_setglobal(L, DEFAULT_URL);
+
+        int top = lua_gettop(L);
+        (void)top;
+        uint32_t* user_data = (uint32_t*)lua_newuserdata(L, 4);
+        *user_data = 1;
+        luaL_newmetatable(L, "ScriptMsgTest");
+        luaL_register(L, 0, META_TABLE);
+        lua_setmetatable(L, -2);
+        dmScript::SetInstance(L);
+        assert(top == lua_gettop(L));
+
+        m_WebServerPort = 9001;
+
     }
 
     virtual void TearDown()
     {
-        dmWebServer::Delete(m_WebServer);
+        lua_pushnil(L);
+        dmScript::SetInstance(L);
+
         if (m_DefaultURL.m_Socket) {
             dmMessage::DeleteSocket(m_DefaultURL.m_Socket);
         }
-        dmScript::Finalize(L, m_ScriptContext);
-        lua_close(L);
+        dmScript::Finalize(m_ScriptContext);
         dmScript::DeleteContext(m_ScriptContext);
         dmConfigFile::Delete(m_ConfigFile);
     }
@@ -167,12 +141,8 @@ void DispatchCallbackDDF(dmMessage::Message *message, void* user_ptr)
     lua_gc(L, LUA_GCCOLLECT, 0);
 
     dmScript::PushDDF(L, descriptor, (const char*)&message->m_Data[0]);
-    int ret = lua_pcall(L, 1, 0, 0);
-    if (ret != 0) {
-        dmLogError("Error: %s", lua_tostring(L,-1));
-        lua_pop(L, 1);
-        ASSERT_TRUE(0);
-    }
+    int ret = dmScript::PCall(L, 1, 0);
+    ASSERT_EQ(0, ret);
 }
 
 TEST_F(ScriptHttpTest, TestPost)
@@ -189,12 +159,10 @@ TEST_F(ScriptHttpTest, TestPost)
     ASSERT_EQ(LUA_TTABLE, lua_type(L, -1));
     lua_getfield(L, -1, "test_http");
     ASSERT_EQ(LUA_TFUNCTION, lua_type(L, -1));
-    int result = lua_pcall(L, 0, LUA_MULTRET, 0);
+    int result = dmScript::PCall(L, 0, LUA_MULTRET);
     if (result == LUA_ERRRUN)
     {
-        dmLogError("Error running script: %s", lua_tostring(L,-1));
         ASSERT_TRUE(false);
-        lua_pop(L, 1);
     }
     else
     {
@@ -203,8 +171,9 @@ TEST_F(ScriptHttpTest, TestPost)
     lua_pop(L, 1);
 
     uint64_t start = dmTime::GetTime();
+
     while (1) {
-        dmWebServer::Update(m_WebServer);
+        dmSys::PumpMessageQueue();
         dmMessage::Dispatch(m_DefaultURL.m_Socket, DispatchCallbackDDF, this);
 
         lua_getglobal(L, "requests_left");
@@ -241,12 +210,10 @@ TEST_F(ScriptHttpTest, TestTimeout)
     ASSERT_EQ(LUA_TTABLE, lua_type(L, -1));
     lua_getfield(L, -1, "test_http_timeout");
     ASSERT_EQ(LUA_TFUNCTION, lua_type(L, -1));
-    int result = lua_pcall(L, 0, LUA_MULTRET, 0);
+    int result = dmScript::PCall(L, 0, LUA_MULTRET);
     if (result == LUA_ERRRUN)
     {
-        dmLogError("Error running script: %s", lua_tostring(L,-1));
         ASSERT_TRUE(false);
-        lua_pop(L, 1);
     }
     else
     {
@@ -256,7 +223,7 @@ TEST_F(ScriptHttpTest, TestTimeout)
 
     uint64_t start = dmTime::GetTime();
     while (1) {
-        dmWebServer::Update(m_WebServer);
+        dmSys::PumpMessageQueue();
         dmMessage::Dispatch(m_DefaultURL.m_Socket, DispatchCallbackDDF, this);
 
         lua_getglobal(L, "requests_left");
@@ -293,12 +260,10 @@ TEST_F(ScriptHttpTest, TestDeletedSocket)
     ASSERT_EQ(LUA_TTABLE, lua_type(L, -1));
     lua_getfield(L, -1, "test_http");
     ASSERT_EQ(LUA_TFUNCTION, lua_type(L, -1));
-    int result = lua_pcall(L, 0, LUA_MULTRET, 0);
+    int result = dmScript::PCall(L, 0, LUA_MULTRET);
     if (result == LUA_ERRRUN)
     {
-        dmLogError("Error running script: %s", lua_tostring(L,-1));
         ASSERT_TRUE(false);
-        lua_pop(L, 1);
     }
     else
     {
@@ -310,7 +275,7 @@ TEST_F(ScriptHttpTest, TestDeletedSocket)
     m_DefaultURL.m_Socket = 0;
 
     for (int i = 0; i < 10; ++i) {
-        dmWebServer::Update(m_WebServer);
+        dmSys::PumpMessageQueue();
         dmTime::Sleep(10 * 1000);
     }
 

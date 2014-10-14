@@ -85,6 +85,8 @@ width = 1280
 height = 720
 [physics]
 scale = 0.02
+[script]
+shared_state = 1
 """
 
 GIT_IGNORE="""
@@ -96,6 +98,7 @@ build
 .project
 .cproject
 builtins
+.internal
 """
 
 def install_sample(bld, sample_dir):

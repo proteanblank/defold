@@ -5,13 +5,29 @@ def configure(conf):
     pass
 
 def build(bld):
-    script = bld.new_task_gen(features = 'cxx cstaticlib',
+    script = bld.new_task_gen(features = 'cxx cc cstaticlib',
                           includes = '. ../proto',
                           proto_gen_cc = False,
                           proto_gen_py = True,
                           protoc_includes = '../proto',
                           target = 'script')
     script.find_sources_in_dirs(['.', '../proto'])
+
+    if bld.env.PLATFORM == 'js-web':
+        script.source.remove(os.path.join('.','script_http.cpp'))
+    else:
+        script.source.remove(os.path.join('.', 'script_http_js.cpp'))
+
+    # luasocket
+    script.find_sources_in_dirs('luasocket')
+    script.source.remove(os.path.join('luasocket', 'mime.c'))
+    script.source.remove(os.path.join('luasocket', 'serial.c'))
+    script.source.remove(os.path.join('luasocket', 'unix.c'))
+    script.cflags = ['-DLUASOCKET_API=']
+    if bld.env.PLATFORM == 'win32':
+        script.source.remove(os.path.join('luasocket', 'usocket.c'))
+    else:
+        script.source.remove(os.path.join('luasocket', 'wsocket.c'))
 
     # We must manually install script_doc_ddf_pb2.py as intall_path is None above
     # in order to avoid installation of dummylib
@@ -29,12 +45,18 @@ def build(bld):
         bld.new_task_gen(source = source,
                          target = '%s_doc.sdoc' % d,
                          rule = '${SCRIPT_DOC} ${SRC} ${TGT}')
+        bld.new_task_gen(source = source,
+                         target = '%s_doc.json' % d,
+                         rule = '${SCRIPT_DOC} -t json ${SRC} ${TGT}')
 
         bld.install_files('${PREFIX}/share/doc', '%s_doc.sdoc' % d)
+        bld.install_files('${PREFIX}/share/doc', '%s_doc.json' % d)
 
     bld.install_files('${PREFIX}/bin', 'script_doc', chmod=493)
     bld.install_files('${PREFIX}/bin', 'script_doc.bat')
     bld.install_files('${PREFIX}/lib/python', 'script_doc.py')
     bld.install_files('${PREFIX}/include/script', 'script.h')
+    if bld.env.PLATFORM == 'js-web':
+        bld.install_files('${PREFIX}/lib/js-web/js', '../lib/js/library_script.js', postpone = False)
 
     bld.add_subdirs('test')

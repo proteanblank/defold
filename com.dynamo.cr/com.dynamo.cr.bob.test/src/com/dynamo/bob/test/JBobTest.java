@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.matchers.JUnitMatchers.hasItem;
 
 import java.io.IOException;
+import java.net.URL;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -29,19 +30,24 @@ import com.dynamo.bob.BuilderParams;
 import com.dynamo.bob.CommandBuilder;
 import com.dynamo.bob.CompileExceptionError;
 import com.dynamo.bob.CopyBuilder;
-import com.dynamo.bob.IResource;
+import com.dynamo.bob.LibraryException;
 import com.dynamo.bob.NullProgress;
 import com.dynamo.bob.OsgiScanner;
 import com.dynamo.bob.Project;
 import com.dynamo.bob.Task;
 import com.dynamo.bob.Task.TaskBuilder;
+import com.dynamo.bob.fs.IResource;
 import com.dynamo.bob.test.util.MockFileSystem;
 import com.dynamo.bob.test.util.MockResource;
+import com.dynamo.bob.util.LibraryUtil;
 import com.dynamo.bob.TaskResult;
 
 public class JBobTest {
     @BuilderParams(name = "InCopyBuilder", inExts = ".in", outExt = ".out")
     public static class InCopyBuilder extends CopyBuilder {}
+
+    @BuilderParams(name = "InCopyBuilderMulti", inExts = ".in2", outExt = ".out")
+    public static class InCopyBuilderMulti extends InCopyBuilder {}
 
     @BuilderParams(name = "ArcBuilder", inExts = ".proj", outExt = ".arc", createOrder = 1000)
     public static class ArcBuilder extends Builder<Void> {
@@ -211,6 +217,7 @@ public class JBobTest {
 
     @After
     public void tearDown() throws Exception {
+        this.project.dispose();
     }
 
     @Test
@@ -228,6 +235,14 @@ public class JBobTest {
         IResource testOut = fileSystem.get("test.out").output();
         assertNotNull(testOut);
         assertThat(new String(testOut.getContent()), is("test data"));
+    }
+
+    @Test(expected=CompileExceptionError.class)
+    public void testTaskOutputMultipleInput() throws Exception {
+        fileSystem.addFile("test.in", "test data".getBytes());
+        fileSystem.addFile("test.in2", "test data 2".getBytes());
+        project.setInputs(Arrays.asList("test.in", "test.in2"));
+        build();
     }
 
     @Test
@@ -438,6 +453,19 @@ public class JBobTest {
         result = build();
         assertThat(result.size(), is(1));
         assertTrue(result.get(0).isOk());
+    }
+
+    @Test
+    public void testUrlParsing() throws Exception {
+        List<URL> urls = LibraryUtil.parseLibraryUrls(" http://localhost ,http://localhost,,");
+        assertThat(urls.size(), is(2));
+        assertTrue(urls.get(0).toString().equals("http://localhost"));
+        assertTrue(urls.get(1).toString().equals("http://localhost"));
+    }
+
+    @Test(expected=LibraryException.class)
+    public void testUrlParsingInvalid() throws Exception {
+        LibraryUtil.parseLibraryUrls(" http://localhost ,http://localhost,,httpinvalid");
     }
 }
 

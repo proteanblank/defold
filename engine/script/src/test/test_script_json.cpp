@@ -24,20 +24,15 @@ protected:
         ASSERT_EQ(dmConfigFile::RESULT_OK, r);
 
         m_Context = dmScript::NewContext(m_ConfigFile, 0);
-
-        L = lua_open();
-        luaL_openlibs(L);
-        dmScript::ScriptParams params;
-        params.m_Context = m_Context;
-        dmScript::Initialize(L, params);
+        dmScript::Initialize(m_Context);
+        L = dmScript::GetLuaState(m_Context);
     }
 
     virtual void TearDown()
     {
         dmConfigFile::Delete(m_ConfigFile);
-        dmScript::Finalize(L, m_Context);
+        dmScript::Finalize(m_Context);
         dmScript::DeleteContext(m_Context);
-        lua_close(L);
     }
 
     dmScript::HContext m_Context;
@@ -67,12 +62,10 @@ TEST_F(ScriptJsonTest, TestJson)
     ASSERT_EQ(LUA_TTABLE, lua_type(L, -1));
     lua_getfield(L, -1, "test_json");
     ASSERT_EQ(LUA_TFUNCTION, lua_type(L, -1));
-    int result = lua_pcall(L, 0, LUA_MULTRET, 0);
+    int result = dmScript::PCall(L, 0, LUA_MULTRET);
     if (result == LUA_ERRRUN)
     {
-        dmLogError("Error running script: %s", lua_tostring(L,-1));
         ASSERT_TRUE(false);
-        lua_pop(L, 1);
     }
     else
     {

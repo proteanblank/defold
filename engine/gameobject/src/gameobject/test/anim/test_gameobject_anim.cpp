@@ -23,10 +23,11 @@ protected:
         params.m_Flags = RESOURCE_FACTORY_FLAGS_EMPTY;
         m_Factory = dmResource::NewFactory(&params, "build/default/src/gameobject/test/anim");
         m_ScriptContext = dmScript::NewContext(0, 0);
-        dmGameObject::Initialize(m_ScriptContext, m_Factory);
+        dmScript::Initialize(m_ScriptContext);
+        dmGameObject::Initialize(m_ScriptContext);
         m_Register = dmGameObject::NewRegister();
-        dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-        dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+        dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+        dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
         m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
         m_FinishCount = 0;
         m_CancelCount = 0;
@@ -36,7 +37,7 @@ protected:
     {
         dmGameObject::DeleteCollection(m_Collection);
         dmGameObject::PostUpdate(m_Register);
-        dmGameObject::Finalize(m_ScriptContext, m_Factory);
+        dmScript::Finalize(m_ScriptContext);
         dmScript::DeleteContext(m_ScriptContext);
         dmResource::DeleteFactory(m_Factory);
         dmGameObject::DeleteRegister(m_Register);
@@ -48,6 +49,7 @@ public:
     dmGameObject::HRegister m_Register;
     dmGameObject::HCollection m_Collection;
     dmResource::HFactory m_Factory;
+    dmGameObject::ModuleContext m_ModuleContext;
     uint32_t m_FinishCount;
     uint32_t m_CancelCount;
 };
@@ -592,6 +594,27 @@ TEST_F(AnimTest, ScriptedDelayedCompositeCallback)
     {
         ASSERT_TRUE(dmGameObject::Update(m_Collection, &m_UpdateContext));
     }
+}
+
+// Test that the 3 component scale can be animated as a uniform scale (legacy)
+TEST_F(AnimTest, UniformScale)
+{
+    dmGameObject::HInstance go = dmGameObject::New(m_Collection, "/dummy.goc");
+
+    m_UpdateContext.m_DT = 0.25f;
+    dmhash_t id = hash("scale");
+    dmGameObject::PropertyVar var(2.f);
+    float duration = 0.25f;
+    float delay = 0.0f;
+
+    dmGameObject::PropertyResult result = Animate(m_Collection, go, 0, id, dmGameObject::PLAYBACK_ONCE_FORWARD, var, dmEasing::TYPE_LINEAR, duration, delay, 0x0, this, 0x0);
+    ASSERT_EQ(dmGameObject::PROPERTY_RESULT_OK, result);
+
+    dmGameObject::Update(m_Collection, &m_UpdateContext);
+
+    ASSERT_NEAR(2.0f, dmGameObject::GetScale(go), 0.000001f);
+
+    dmGameObject::Delete(m_Collection, go);
 }
 
 int main(int argc, char **argv)

@@ -58,7 +58,7 @@ namespace dmPhysics
         {
             if (m_GetWorldTransform != 0x0)
             {
-                dmTransform::TransformS1 world_transform;
+                dmTransform::Transform world_transform;
                 m_GetWorldTransform(m_UserData, world_transform);
                 Vectormath::Aos::Point3 position = Vectormath::Aos::Point3(world_transform.GetTranslation());
                 Vectormath::Aos::Quat rotation = Vectormath::Aos::Quat(world_transform.GetRotation());
@@ -260,10 +260,9 @@ namespace dmPhysics
         HContext3D context = world->m_Context;
         float scale = context->m_Scale;
         // Epsilon defining what transforms are considered noise and not
-        // Values are picked by inspection, rotation should go down after the quat => angle conversion has been fixed
-        // Current value is roughly equivalent to 1 degree
+        // Values are picked by inspection, current rot value is roughly equivalent to 1 degree
         const float POS_EPSILON = 0.00005f * scale;
-        const float ROT_EPSILON = 0.0025f;
+        const float ROT_EPSILON = 0.00007f;
         // Update all trigger transforms before physics world step
         if (world->m_GetWorldTransform != 0x0)
         {
@@ -277,7 +276,7 @@ namespace dmPhysics
                 {
                     Point3 old_position = GetWorldPosition(context, collision_object);
                     Quat old_rotation = GetWorldRotation(context, collision_object);
-                    dmTransform::TransformS1 world_transform;
+                    dmTransform::Transform world_transform;
                     (*world->m_GetWorldTransform)(collision_object->getUserPointer(), world_transform);
                     Vectormath::Aos::Point3 position = Vectormath::Aos::Point3(world_transform.GetTranslation());
                     Vectormath::Aos::Quat rotation = Vectormath::Aos::Quat(world_transform.GetRotation());
@@ -572,7 +571,14 @@ namespace dmPhysics
             btRigidBody::btRigidBodyConstructionInfo rb_info(data.m_Mass, motion_state, compound_shape, local_inertia);
             rb_info.m_friction = data.m_Friction;
             rb_info.m_restitution = data.m_Restitution;
+            rb_info.m_linearDamping = data.m_LinearDamping;
+            rb_info.m_angularDamping = data.m_AngularDamping;
             btRigidBody* body = new btRigidBody(rb_info);
+            float angular_factor = 1.0f;
+            if (data.m_LockedRotation) {
+                angular_factor = 0.0f;
+            }
+            body->setAngularFactor(angular_factor);
             switch (data.m_Type)
             {
             case COLLISION_OBJECT_TYPE_KINEMATIC:
@@ -595,7 +601,7 @@ namespace dmPhysics
             btTransform world_t;
             if (world->m_GetWorldTransform != 0x0)
             {
-                dmTransform::TransformS1 world_transform;
+                dmTransform::Transform world_transform;
                 world->m_GetWorldTransform(data.m_UserData, world_transform);
                 Vectormath::Aos::Point3 position = Vectormath::Aos::Point3(world_transform.GetTranslation());
                 Vectormath::Aos::Quat rotation = Vectormath::Aos::Quat(world_transform.GetRotation());
@@ -777,7 +783,7 @@ namespace dmPhysics
                 body->setAngularVelocity(btVector3(0.0f, 0.0f, 0.0f));
                 if (world->m_GetWorldTransform != 0x0)
                 {
-                    dmTransform::TransformS1 world_transform;
+                    dmTransform::Transform world_transform;
                     world->m_GetWorldTransform(body->getUserPointer(), world_transform);
                     Vectormath::Aos::Point3 position = Vectormath::Aos::Point3(world_transform.GetTranslation());
                     Vectormath::Aos::Quat rotation = Vectormath::Aos::Quat(world_transform.GetRotation());
@@ -811,6 +817,69 @@ namespace dmPhysics
     {
         btCollisionObject* co = GetCollisionObject(collision_object);
         return co->getActivationState() == ISLAND_SLEEPING;
+    }
+
+    void SetLockedRotation3D(HCollisionObject3D collision_object, bool locked_rotation) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0) {
+            if (locked_rotation) {
+                body->setAngularFactor(0.0f);
+                // Reset velocity
+                body->setAngularVelocity(btVector3(0.0f, 0.0f, 0.0f));
+            } else {
+                body->setAngularFactor(1.0f);
+            }
+        }
+    }
+
+    float GetLinearDamping3D(HCollisionObject3D collision_object) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0) {
+            return body->getLinearDamping();
+        } else {
+            return 0.0f;
+        }
+    }
+
+    void SetLinearDamping3D(HCollisionObject3D collision_object, float linear_damping) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0) {
+            body->setDamping(linear_damping, body->getAngularDamping());
+        }
+    }
+
+    float GetAngularDamping3D(HCollisionObject3D collision_object) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0) {
+            return body->getAngularDamping();
+        } else {
+            return 0.0f;
+        }
+    }
+
+    void SetAngularDamping3D(HCollisionObject3D collision_object, float angular_damping) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0) {
+            body->setDamping(body->getLinearDamping(), angular_damping);
+        }
+    }
+
+    float GetMass3D(HCollisionObject3D collision_object) {
+        btCollisionObject* co = GetCollisionObject(collision_object);
+        btRigidBody* body = btRigidBody::upcast(co);
+        if (body != 0x0 && !body->isKinematicObject() && !body->isStaticObject()) {
+            // Creating a dynamic body with 0 mass results in an error and the body is not created
+            // Assert here just in case that would change
+            assert(body->getInvMass() != 0.0f);
+            return 1.0f / body->getInvMass();
+        } else {
+            return 0.0f;
+        }
     }
 
     void RequestRayCast3D(HWorld3D world, const RayCastRequest& request)

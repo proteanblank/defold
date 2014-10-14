@@ -141,7 +141,7 @@ int IAP_List(lua_State* L)
     dmScript::GetInstance(L);
     g_IAP.m_Self = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    g_IAP.m_L = L;
+    g_IAP.m_L = dmScript::GetMainThread(L);
 
     JNIEnv* env = Attach();
     jstring products = env->NewStringUTF(buf);
@@ -196,7 +196,7 @@ int IAP_SetListener(lua_State* L)
         luaL_unref(iap->m_Listener.m_L, LUA_REGISTRYINDEX, iap->m_Listener.m_Self);
     }
 
-    iap->m_Listener.m_L = L;
+    iap->m_Listener.m_L = dmScript::GetMainThread(L);
     iap->m_Listener.m_Callback = cb;
 
     dmScript::GetInstance(L);
@@ -364,11 +364,7 @@ void HandleProductResult(const Command* cmd)
         PushError(L, "failed to fetch product");
     }
 
-    int ret = lua_pcall(L, 3, LUA_MULTRET, 0);
-    if (ret != 0) {
-        dmLogError("Error running iap callback: %s", lua_tostring(L,-1));
-        lua_pop(L, 1);
-    }
+    dmScript::PCall(L, 3, LUA_MULTRET);
 
     luaL_unref(L, LUA_REGISTRYINDEX, g_IAP.m_Callback);
     luaL_unref(L, LUA_REGISTRYINDEX, g_IAP.m_Self);
@@ -423,11 +419,7 @@ void HandlePurchaseResult(const Command* cmd)
         PushError(L, "failed to buy product");
     }
 
-    int ret = lua_pcall(L, 3, LUA_MULTRET, 0);
-    if (ret != 0) {
-        dmLogError("Error running iap callback: %s", lua_tostring(L,-1));
-        lua_pop(L, 1);
-    }
+    dmScript::PCall(L, 3, LUA_MULTRET);
 
     assert(top == lua_gettop(L));
 }

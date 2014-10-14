@@ -4,13 +4,14 @@ mkdir -p engine/darwin
 mkdir -p engine/win32
 mkdir -p engine/ios
 mkdir -p engine/android
+mkdir -p engine/js-web
 
-SHA1=`git log --oneline | head -1 | awk '{ print $1 }'`
+SHA1=`git log --pretty=%H -n1`
 
 copy () {
-	# echo for indicating progress as scp progress is suppressed when not running in a tty (e.g. from maven or on buildbot)
-	echo "Copying $1"
-	scp builder@ci-master.defold.com:/archive/${SHA1}/engine/$1 $2
+    # echo for indicating progress as scp progress is suppressed when not running in a tty (e.g. from maven or on buildbot)
+    echo "Copying $1"
+    cp -v $DYNAMO_HOME/archive/${SHA1}/engine/$1 $2
 }
 
 copy linux/dmengine engine/linux/dmengine
@@ -23,3 +24,5 @@ copy armv7-darwin/dmengine engine/ios/dmengine
 copy armv7-darwin/dmengine_release engine/ios/dmengine_release
 copy armv7-android/libdmengine.so engine/android/libdmengine.so
 copy armv7-android/libdmengine_release.so engine/android/libdmengine_release.so
+copy js-web/dmengine.js engine/js-web/dmengine.js
+copy js-web/dmengine_release.js engine/js-web/dmengine_release.js

@@ -26,10 +26,11 @@ protected:
         params.m_Flags = RESOURCE_FACTORY_FLAGS_EMPTY;
         m_Factory = dmResource::NewFactory(&params, "build/default/src/gameobject/test/input");
         m_ScriptContext = dmScript::NewContext(0, 0);
-        dmGameObject::Initialize(m_ScriptContext, m_Factory);
+        dmScript::Initialize(m_ScriptContext);
+        dmGameObject::Initialize(m_ScriptContext);
         m_Register = dmGameObject::NewRegister();
-        dmGameObject::RegisterResourceTypes(m_Factory, m_Register);
-        dmGameObject::RegisterComponentTypes(m_Factory, m_Register);
+        dmGameObject::RegisterResourceTypes(m_Factory, m_Register, m_ScriptContext, &m_ModuleContext);
+        dmGameObject::RegisterComponentTypes(m_Factory, m_Register, m_ScriptContext);
         m_Collection = dmGameObject::NewCollection("collection", m_Factory, m_Register, 1024);
 
         dmResource::Result e = dmResource::RegisterType(m_Factory, "it", this, ResInputTargetCreate, ResInputTargetDestroy, 0);
@@ -54,7 +55,7 @@ protected:
     {
         dmGameObject::DeleteCollection(m_Collection);
         dmGameObject::PostUpdate(m_Register);
-        dmGameObject::Finalize(m_ScriptContext, m_Factory);
+        dmScript::Finalize(m_ScriptContext);
         dmScript::DeleteContext(m_ScriptContext);
         dmResource::DeleteFactory(m_Factory);
         dmGameObject::DeleteRegister(m_Register);
@@ -76,6 +77,7 @@ public:
     dmGameObject::HRegister m_Register;
     dmGameObject::HCollection m_Collection;
     dmResource::HFactory m_Factory;
+    dmGameObject::ModuleContext m_ModuleContext;
 };
 
 dmResource::Result InputTest::ResInputTargetCreate(dmResource::HFactory factory, void* context, const void* buffer, uint32_t buffer_size, dmResource::SResourceDescriptor* resource, const char* filename)

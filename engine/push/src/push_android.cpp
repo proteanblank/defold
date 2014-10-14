@@ -103,7 +103,7 @@ int Push_Register(lua_State* L)
     g_Push.m_Callback = luaL_ref(L, LUA_REGISTRYINDEX);
     dmScript::GetInstance(L);
     g_Push.m_Self = luaL_ref(L, LUA_REGISTRYINDEX);
-    g_Push.m_L = L;
+    g_Push.m_L = dmScript::GetMainThread(L);
 
     JNIEnv* env = Attach();
     env->CallVoidMethod(g_Push.m_Push, g_Push.m_Register, g_AndroidApp->activity->clazz);
@@ -125,7 +125,7 @@ int Push_SetListener(lua_State* L)
         luaL_unref(push->m_Listener.m_L, LUA_REGISTRYINDEX, push->m_Listener.m_Self);
     }
 
-    push->m_Listener.m_L = L;
+    push->m_Listener.m_L = dmScript::GetMainThread(L);
     push->m_Listener.m_Callback = cb;
 
     dmScript::GetInstance(L);
@@ -280,11 +280,7 @@ void HandleRegistrationResult(const Command* cmd)
         dmLogError("GCM error %s", (const char*) cmd->m_Data2);
     }
 
-    int ret = lua_pcall(L, 3, LUA_MULTRET, 0);
-    if (ret != 0) {
-        dmLogError("Error running push callback: %s", lua_tostring(L,-1));
-        lua_pop(L, 1);
-    }
+    dmScript::PCall(L, 3, LUA_MULTRET);
 
     luaL_unref(L, LUA_REGISTRYINDEX, g_Push.m_Callback);
     luaL_unref(L, LUA_REGISTRYINDEX, g_Push.m_Self);
@@ -323,11 +319,7 @@ void HandlePushMessageResult(const Command* cmd)
     dmJson::Result r = dmJson::Parse((const char*) cmd->m_Data1, &doc);
     if (r == dmJson::RESULT_OK && doc.m_NodeCount > 0) {
         ToLua(L, &doc, 0);
-        int ret = lua_pcall(L, 2, LUA_MULTRET, 0);
-        if (ret != 0) {
-            dmLogError("Error running push callback: %s", lua_tostring(L,-1));
-            lua_pop(L, 1);
-        }
+        dmScript::PCall(L, 2, LUA_MULTRET);
     } else {
         dmLogError("Failed to parse push response (%d)", r);
     }
