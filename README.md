@@ -16,6 +16,16 @@ Setup
 
 * [Java 8 JDK](http://www.oracle.com/technetwork/java/javase/downloads/index.html)
 * [Eclipse 3.8.2](http://archive.eclipse.org/eclipse/downloads/drops/R-3.8.2-201301310800/) (the editor isn't compatible with Eclipse 4.X)
+* Python (on OSX you must run the python version shipped with OSX, eg no homebrew installed python versions)
+
+* Linux:
+
+        $ sudo apt-get install libxi-dev freeglut3-dev libglu1-mesa-dev libgl1-mesa-dev libxext-dev x11proto-xext-dev mesa-common-dev libxt-dev libx11-dev libcurl4-openssl-dev uuid-dev python-setuptools build-essential
+
+* Windows:
+  - [Visual C++ 2010 Express](http://www.visualstudio.com/downloads/download-visual-studio-vs#DownloadFamilies_4)
+  - [MSYS/MinGW](http://www.mingw.org/), will get you a shell that behaves like Linux, and much easier to build defold through.
+  - [easy_install]( https://pypi.python.org/pypi/setuptools#id3 )
 
 **Eclipse Plugins**
 
@@ -61,7 +71,7 @@ setup. See `build.py` and the `shell` command below.
 **Optional Software**
 
 * [ccache](http://ccache.samba.org) - install with `brew install ccache` on OS X and `sudo apt-get install ccache`
-  on Debian based Linux distributions
+  on Debian based Linux distributions.
 
 **Import Java Projects**
 
@@ -132,6 +142,61 @@ Build and Run Editor
     - Deselect `Build` in `General Options`
     - This disables building of custom build steps and explicit invocation of `Project > Build All` is now required.
 
+Note: When running the editor and building a Defold project you must first go to Preferences->Defold->Custom Application and point it to a dmengine built for your OS.
+
+**Notes for building the editor under Linux:**
+* Install JDK8 (from Oracle) and make sure Eclipse is using it (`Preferences > Java > Installed JREs`).
+* Install [libssl0.9.8](https://packages.debian.org/squeeze/i386/libssl0.9.8/download), the Git version bundled with the editor is currently linked against libcrypto.so.0.9.8.
+* Make sure that the [protobuf-compiler](http://www.rpmseek.com/rpm-dl/protobuf-compiler_2.3.0-2_i386.html) version used is 2.3, latest (2.4) does not work.
+* `.deb` files can be installed by running:
+
+        $ sudo dpkg -i <filename>.deb
+
+        # If dpkg complains about dependencies, run this directly afterwards:
+        $ sudo apt-get install -f
+
+### Troubleshooting
+If you run the editor and get the following error while launching:
+
+```
+1) Error injecting constructor, java.net.SocketException: Can't assign requested address
+  at com.dynamo.upnp.SSDP.<init>(SSDP.java:62)
+  while locating com.dynamo.upnp.SSDP
+  at com.dynamo.cr.target.core.TargetPlugin$Module.configure(TargetPlugin.java:42)
+  while locating com.dynamo.upnp.ISSDP
+    for parameter 0 at com.dynamo.cr.target.core.TargetService.<init>(TargetService.java:95)
+  while locating com.dynamo.cr.target.core.TargetService
+  at com.dynamo.cr.target.core.TargetPlugin$Module.configure(TargetPlugin.java:40)
+  while locating com.dynamo.cr.target.core.ITargetService
+
+1 error
+    at com.google.inject.internal.InjectorImpl$4.get(InjectorImpl.java:987)
+    at com.google.inject.internal.InjectorImpl.getInstance(InjectorImpl.java:1013)
+    at com.dynamo.cr.target.core.TargetPlugin.start(TargetPlugin.java:54)
+    at org.eclipse.osgi.framework.internal.core.BundleContextImpl$1.run(BundleContextImpl.java:711)
+    at java.security.AccessController.doPrivileged(Native Method)
+    at org.eclipse.osgi.framework.internal.core.BundleContextImpl.startActivator(BundleContextImpl.java:702)
+    ... 65 more
+Caused by: java.net.SocketException: Can't assign requested address
+    at java.net.PlainDatagramSocketImpl.join(Native Method)
+    at java.net.AbstractPlainDatagramSocketImpl.join(AbstractPlainDatagramSocketImpl.java:179)
+    at java.net.MulticastSocket.joinGroup(MulticastSocket.java:323)
+```
+
+And the editor starts with:
+
+```
+Plug-in com.dynamo.cr.target was unable to load class com.dynamo.cr.target.TargetContributionFactory.
+An error occurred while automatically activating bundle com.dynamo.cr.target (23).
+```
+
+Then add the following to the VM args in your Run Configuration:
+
+```
+-Djava.net.preferIPv4Stack=true
+```
+
+
 Licenses
 --------
 
@@ -141,6 +206,7 @@ Licenses
 * **axTLS**: [http://axtls.sourceforge.net](http://axtls.sourceforge.net) - **BSD**
 * **stb_image** [http://nothings.org/](http://nothings.org) **Public domain**
 * **stb_vorbis** [http://nothings.org/](http://nothings.org) **Public domain**
+* **tremolo** [http://wss.co.uk/pinknoise/tremolo/](http://wss.co.uk/pinknoise/tremolo/) **BSD**
 * **facebook** [https://github.com/facebook/facebook-ios-sdk](https://github.com/facebook/facebook-ios-sdk) **Apache**
 * **glfw** [http://www.glfw.org](http://www.glfw.org) **zlib/libpng**
 * **lua** [http://www.lua.org](http://www.lua.org) **MIT**
@@ -271,7 +337,10 @@ Facebook and Google Play into this location.
 * Download SDK Tools 23.0 from here: [http://developer.android.com/sdk/index.html](http://developer.android.com/sdk/index.html).
   Drill down to *VIEW ALL DOWNLOADS AND SIZES* and *SDK Tools Only*. Change URL to ...23.0.. if necessary.
 * Launch android tool and install Android SDK Platform-tools 20 and Build-tools 20.0
-* Download NDK 10b: [http://developer.android.com/tools/sdk/ndk/index.html](http://developer.android.com/tools/sdk/ndk/index.html)
+* Download NDK 10b: [http://developer.android.com/tools/sdk/ndk/index.html](http://developer.android.com/tools/sdk/ndk/index.html).
+  The revision you look for might be outdated and the path syntax to the link tends to change.
+  You can find older versions, for example Max OS X 64, r10b, by the following convention:
+    [http://dl.google.com/android/ndk/android-ndk32-r10b-darwin-x86_64.tar.bz2](http://dl.google.com/android/ndk/android-ndk32-r10b-darwin-x86_64.tar.bz2).
 * Put NDK/SDK in ~/android/android-ndk-r10b and ~/android/android-sdk respectively
 
 ### Android testing

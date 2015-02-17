@@ -36,7 +36,7 @@ protected:
         delete [] m_VertexBuffer;
     }
 
-    void VerifyVertexTexCoords(dmParticle::Vertex* vertex_buffer, float* tex_coords, uint32_t tile);
+    void VerifyVertexTexCoords(dmParticle::Vertex* vertex_buffer, float* tex_coords, uint32_t tile, bool rotated_on_atlas);
     void VerifyVertexDims(dmParticle::Vertex* vertex_buffer, uint32_t particle_count, float size, uint32_t tile_width, uint32_t tile_height);
 
     dmParticle::HContext m_Context;
@@ -48,26 +48,43 @@ protected:
 static const float EPSILON = 0.000001f;
 
 // tile is 0-based
-void ParticleTest::VerifyVertexTexCoords(dmParticle::Vertex* vertex_buffer, float* tex_coords, uint32_t tile)
+void ParticleTest::VerifyVertexTexCoords(dmParticle::Vertex* vertex_buffer, float* tex_coords, uint32_t tile, bool rotated_on_atlas)
 {
-    float* tc = &tex_coords[tile * 4];
-    uint16_t u0 = tc[0] * 65535.0f;
-    uint16_t v0 = tc[1] * 65535.0f;
-    uint16_t u1 = tc[2] * 65535.0f;
-    uint16_t v1 = tc[3] * 65535.0f;
-    // The particle vertices are ordered like an N, where the first triangle is the lower left, second is upper right
+    float* tc = &tex_coords[tile * 8];
+    uint16_t u0;
+    uint16_t v0;
+    uint16_t u1;
+    uint16_t v1;
+
+    if (rotated_on_atlas) {
+        u0 = tc[0] * 65535.0f;
+        v0 = tc[1] * 65535.0f;
+        u1 = tc[2] * 65535.0f;
+        v1 = tc[5] * 65535.0f;
+    } else {
+        u0 = tc[0] * 65535.0f;
+        v0 = tc[3] * 65535.0f;
+        u1 = tc[4] * 65535.0f;
+        v1 = tc[7] * 65535.0f;
+    }
+
+    // The particle vertices are emitted in the following order:
+    // 1 -- 2               3
+    // |         then       |
+    // 0               5 -- 4
+
     ASSERT_EQ(u0, vertex_buffer[0].m_U);
     ASSERT_EQ(v1, vertex_buffer[0].m_V);
     ASSERT_EQ(u0, vertex_buffer[1].m_U);
     ASSERT_EQ(v0, vertex_buffer[1].m_V);
     ASSERT_EQ(u1, vertex_buffer[2].m_U);
-    ASSERT_EQ(v1, vertex_buffer[2].m_V);
+    ASSERT_EQ(v0, vertex_buffer[2].m_V);
     ASSERT_EQ(u1, vertex_buffer[3].m_U);
-    ASSERT_EQ(v1, vertex_buffer[3].m_V);
-    ASSERT_EQ(u0, vertex_buffer[4].m_U);
-    ASSERT_EQ(v0, vertex_buffer[4].m_V);
-    ASSERT_EQ(u1, vertex_buffer[5].m_U);
-    ASSERT_EQ(v0, vertex_buffer[5].m_V);
+    ASSERT_EQ(v0, vertex_buffer[3].m_V);
+    ASSERT_EQ(u1, vertex_buffer[4].m_U);
+    ASSERT_EQ(v1, vertex_buffer[4].m_V);
+    ASSERT_EQ(u0, vertex_buffer[5].m_U);
+    ASSERT_EQ(v1, vertex_buffer[5].m_V);
 }
 
 void ParticleTest::VerifyVertexDims(dmParticle::Vertex* vertex_buffer, uint32_t particle_count, float size, uint32_t tile_width, uint32_t tile_height)
@@ -85,8 +102,8 @@ void ParticleTest::VerifyVertexDims(dmParticle::Vertex* vertex_buffer, uint32_t 
     for (uint32_t i = 0; i < particle_count; ++i)
     {
         dmParticle::Vertex* v = &vertex_buffer[i*6];
-        float x = v[0].m_X - v[2].m_X;
-        float y = v[0].m_Y - v[2].m_Y;
+        float x = v[1].m_X - v[2].m_X;
+        float y = v[1].m_Y - v[2].m_Y;
         float w = sqrt(x * x + y * y);
         ASSERT_NEAR(size * width_factor, w, 0.000001f);
         x = v[0].m_X - v[1].m_X;
@@ -223,7 +240,7 @@ void EmptyRenderInstanceCallback(void* usercontext, void* material, void* textur
 
 float g_UnitTexCoords[] =
 {
-        0.0f, 0.0f, 1.0f, 1.0f
+        0.0f,1.0f, 0.0f,0.0f, 1.0f,0.0f, 1.0f,1.0f
 };
 
 /**
@@ -281,7 +298,7 @@ TEST_F(ParticleTest, IncompleteParticleFX)
             ASSERT_EQ(sizeof(vertex_buffer), out_vertex_buffer_size);
             ASSERT_EQ((void*)0x0, render_data.m_Material);
             ASSERT_EQ((void*)0x0, render_data.m_Texture);
-            VerifyVertexTexCoords((dmParticle::Vertex*)&((float*)vertex_buffer)[render_data.m_VertexIndex], g_UnitTexCoords, 0);
+            VerifyVertexTexCoords((dmParticle::Vertex*)&((float*)vertex_buffer)[render_data.m_VertexIndex], g_UnitTexCoords, 0, false);
             ASSERT_EQ(6u, render_data.m_VertexCount);
             ASSERT_EQ((void*)0x0, render_data.m_Texture);
         }
@@ -340,6 +357,38 @@ TEST_F(ParticleTest, OnceDelay)
 
     dmParticle::StartInstance(m_Context, instance);
     ASSERT_FALSE(dmParticle::IsSleeping(m_Context, instance));
+    ASSERT_EQ(0u, ParticleCount(e));
+    // delay
+    dmParticle::Update(m_Context, dt, m_VertexBuffer, m_VertexBufferSize, 0x0, 0x0);
+    ASSERT_EQ(0u, ParticleCount(e));
+    // spawn
+    dmParticle::Update(m_Context, dt, m_VertexBuffer, m_VertexBufferSize, 0x0, 0x0);
+    ASSERT_EQ(1u, ParticleCount(e));
+    // wait for particle to die
+    dmParticle::Update(m_Context, dt, m_VertexBuffer, m_VertexBufferSize, 0x0, 0x0);
+    ASSERT_EQ(0u, ParticleCount(e));
+    ASSERT_TRUE(dmParticle::IsSleeping(m_Context, instance));
+
+    dmParticle::DestroyInstance(m_Context, instance);
+}
+
+/**
+ * Verify once emitters respect delay longer than duration (bug)
+ */
+TEST_F(ParticleTest, OnceLongDelay)
+{
+    float dt = 1.0f;
+
+    ASSERT_TRUE(LoadPrototype("once_long_delay.particlefxc", &m_Prototype));
+    dmParticle::HInstance instance = dmParticle::CreateInstance(m_Context, m_Prototype);
+    dmParticle::Emitter* e = GetEmitter(m_Context, instance, 0);
+    ASSERT_TRUE(dmParticle::IsSleeping(m_Context, instance));
+
+    dmParticle::StartInstance(m_Context, instance);
+    ASSERT_FALSE(dmParticle::IsSleeping(m_Context, instance));
+    ASSERT_EQ(0u, ParticleCount(e));
+    // delay
+    dmParticle::Update(m_Context, dt, m_VertexBuffer, m_VertexBufferSize, 0x0, 0x0);
     ASSERT_EQ(0u, ParticleCount(e));
     // delay
     dmParticle::Update(m_Context, dt, m_VertexBuffer, m_VertexBufferSize, 0x0, 0x0);
@@ -804,17 +853,22 @@ TEST_F(ParticleTest, ParticleInstanceScale)
  * Test that flip book animations are updated correctly
  */
 
+
+// For unrotated quads, the order is: [(minU,maxV),(minU,minV),(maxU,minV),(maxU,maxV)]
+// For rotated quads, the order is: [(minU,minV),(maxU,minV),(maxU,maxV),(minU,maxV)]
+// See texture_set_ddf.proto
 float g_TexCoords[] =
 {
         // 2 x 4 tiles
-        0.0f, 0.0f, 0.25f, 0.5f,
-        0.25f, 0.0f, 0.5f, 0.5f,
-        0.5f, 0.0f, 0.75f, 0.5f,
-        0.75f, 0.0f, 1.0f, 0.5f,
-        0.0f, 0.5f, 0.25f, 1.0f,
-        0.25f, 0.5f, 0.5f, 1.0f,
-        0.5f, 0.5f, 0.75f, 1.0f,
-        0.75f, 0.5f, 1.0f, 1.0f,
+        0.0f,0.5f, 0.0f,0.0f, 0.25f,0.0f, 0.25f,0.5f,
+        0.25f,0.5f, 0.25f,0.0f, 0.5f,0.0f, 0.5f,0.5f,
+        0.5f,0.5f, 0.5f,0.0f, 0.75f,0.0, 0.75f,0.5f,
+        0.75f,0.5f, 0.75f,0.0f, 1.0f,0.0f, 1.0f,0.5f,
+        0.0f,1.0f, 0.0f,0.5f, 0.25f,0.5f, 0.25f,1.0f,
+        0.25f,1.0f, 0.25f,0.5f, 0.5f,0.5f, 0.5f,1.0f,
+        // Rotated sprites
+        0.5f,0.5f, 0.75f,0.5f, 0.75f,1.0f, 0.5f,1.0f,
+        0.75f,0.5f, 1.0f,0.5f, 1.0f,1.0f, 0.75f,1.0f
 };
 
 struct TileSource
@@ -904,7 +958,9 @@ TEST_F(ParticleTest, Animation)
             uint32_t tile = tiles[type][it];
             if (tile > 0)
             {
-                VerifyVertexTexCoords(vb, g_TexCoords, tile - 1);
+                int index = tile - 1;
+                bool rotated = 6 < index;
+                VerifyVertexTexCoords(vb, g_TexCoords, index, rotated);
                 VerifyVertexDims(vb, 1, 1.0f, 2, 3);
                 vb += 6;
             }
