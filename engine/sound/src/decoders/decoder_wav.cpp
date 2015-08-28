@@ -228,5 +228,5 @@ namespace dmSoundCodec
 
     DM_DECLARE_SOUND_DECODER(AudioDecoderWav, "WavDecoder", FORMAT_WAV,
                              0,
-                             WavOpenStream, WavCloseStream, WavDecodeStream, WavResetStream, WavSkipInStream, WavGetInfo);
+                             WavOpenStream, WavCloseStream, WavDecodeStream, WavResetStream, WavSkipInStream, 0, WavGetInfo);
 }

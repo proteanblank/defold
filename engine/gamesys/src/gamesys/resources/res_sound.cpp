@@ -11,7 +11,20 @@ namespace dmGameSystem
                                         Sound** sound)
     {
         dmSound::HSoundData sound_data = 0;
-        dmResource::Result fr = dmResource::Get(factory, sound_desc->m_Sound, (void**) &sound_data);
+        dmResource::Result fr;
+        
+        if (sound_desc->m_Sound[0])
+        {
+            fr = dmResource::Get(factory, sound_desc->m_Sound, (void**) &sound_data);
+        }
+        else
+        {
+            if (dmSound::NewSoundData(0, 0, dmSound::SOUND_DATA_TYPE_RAW, &sound_data) == dmSound::RESULT_OK)
+                fr = dmResource::RESULT_OK;
+            else
+                fr = dmResource::RESULT_FORMAT_ERROR;
+        }
+
         if (fr == dmResource::RESULT_OK)
         {
             Sound*s = new Sound();
@@ -19,6 +32,7 @@ namespace dmGameSystem
             s->m_Looping = sound_desc->m_Looping;
             s->m_GroupHash = dmHashString64(sound_desc->m_Group);
             s->m_Gain = sound_desc->m_Gain;
+            s->m_LoadedFromResource = (sound_desc->m_Sound[0] != 0);
 
             dmSound::Result result = dmSound::AddGroup(sound_desc->m_Group);
             if (result != dmSound::RESULT_OK) {
@@ -46,6 +60,7 @@ namespace dmGameSystem
         {
             return dmResource::RESULT_FORMAT_ERROR;
         }
+        
         dmResource::PreloadHint(hint_info, sound_desc->m_Sound);
         *preload_data = sound_desc;
         return dmResource::RESULT_OK;
@@ -74,7 +89,14 @@ namespace dmGameSystem
     {
         Sound* sound = (Sound*) resource->m_Resource;
 
-        dmResource::Release(factory, (void*) sound->m_SoundData);
+        if (sound->m_LoadedFromResource)
+        {
+            dmResource::Release(factory, (void*) sound->m_SoundData);
+        }
+        else
+        {
+            dmSound::DeleteSoundData(sound->m_SoundData);
+        }
         delete sound;
         return dmResource::RESULT_OK;
     }

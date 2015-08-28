@@ -136,6 +136,33 @@ TEST_F(dmSoundTest, SoundData)
     }
 }
 
+TEST_F(dmSoundTest, SoundDataRaw)
+{
+    const uint32_t n = 100;
+    std::vector<dmSound::HSoundData> sounds;
+
+    for (uint32_t i = 0; i < n; ++i)
+    {
+        dmSound::HSoundData sd = 0;
+        dmSound::Result r = dmSound::NewSoundData(0, 0, dmSound::SOUND_DATA_TYPE_RAW, &sd);
+        ASSERT_EQ(dmSound::RESULT_OK, r);
+        ASSERT_NE((dmSound::HSoundData) 0, sd);
+        r = dmSound::SetSoundData(sd, 0, 0);
+        ASSERT_EQ(dmSound::RESULT_OK, r);
+        ASSERT_NE((dmSound::HSoundData) 0, sd);
+        sounds.push_back(sd);
+    }
+    
+    dmSound::StreamSoundInstance(0 ,0 ,0 ,0);
+
+    for (uint32_t i = 0; i < n; ++i)
+    {
+        dmSound::HSoundData sd = sounds[i];
+        dmSound::Result r = dmSound::DeleteSoundData(sd);
+        ASSERT_EQ(dmSound::RESULT_OK, r);
+    }
+}
+
 TEST_F(dmSoundTest, SoundDataInstance)
 {
     const uint32_t n = 100;

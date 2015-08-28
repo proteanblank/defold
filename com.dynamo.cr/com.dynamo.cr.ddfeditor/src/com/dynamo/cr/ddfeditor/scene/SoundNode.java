@@ -14,7 +14,6 @@ public class SoundNode extends ComponentTypeNode {
 
     @Property(editorType=EditorType.RESOURCE, extensions={"ogg", "wav"})
     @Resource
-    @NotEmpty
     private String sound = "";
 
     @Property

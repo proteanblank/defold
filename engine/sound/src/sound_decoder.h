@@ -60,6 +60,11 @@ namespace dmSoundCodec
         Result (*m_SkipInStream)(HDecodeStream, uint32_t bytes, uint32_t* skipped);
 
         /**
+         * Feed
+         */
+        Result (*m_Feed)(HDecodeStream, char* buffer, uint32_t size, uint32_t* left);
+
+        /**
          * Get samplerate and number of channels.
          */
         void (*m_GetStreamInfo)(HDecodeStream, struct Info* out);
@@ -106,7 +111,7 @@ namespace dmSoundCodec
     /**
      * Declare a new stream decoder
      */
-    #define DM_DECLARE_SOUND_DECODER(symbol, name, format, score, open, close, decode, reset, skip, getinfo) \
+    #define DM_DECLARE_SOUND_DECODER(symbol, name, format, score, open, close, decode, reset, skip, feed, getinfo) \
             dmSoundCodec::DecoderInfo DM_SOUND_PASTE2(symbol, __LINE__) = { \
                     name, \
                     format, \
@@ -116,6 +121,7 @@ namespace dmSoundCodec
                     decode, \
                     reset, \
                     skip, \
+                    feed, \
                     getinfo, \
             };\
         DM_REGISTER_SOUND_DECODER(symbol, DM_SOUND_PASTE2(symbol, __LINE__))

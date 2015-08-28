@@ -196,5 +196,5 @@ namespace dmSoundCodec
 
     // TREMOLO_SCORE is provided by wscript
     DM_DECLARE_SOUND_DECODER(AudioDecoderTremolo, "VorbisDecoderTremolo", FORMAT_VORBIS, TREMOLO_SCORE,
-                             TremoloOpenStream, TremoloCloseStream, TremoloDecode, TremoloResetStream, TremoloSkipInStream, TremoloGetInfo);
+                             TremoloOpenStream, TremoloCloseStream, TremoloDecode, TremoloResetStream, TremoloSkipInStream, 0, TremoloGetInfo);
 }

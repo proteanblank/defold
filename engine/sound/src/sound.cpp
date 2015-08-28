@@ -458,6 +458,11 @@ namespace dmSound
 
         return RESULT_OK;
     }
+    
+    Result StreamSoundInstance(HSoundInstance sound_instance, char* buffer, uint32_t size, uint32_t* left)
+    {
+        return RESULT_UNSUPPORTED;
+    }
 
     static uint32_t FillBufferWav(SoundData* sound_data, SoundInstance* instance, ALuint buffer)
     {
@@ -820,6 +825,4 @@ namespace dmSound
     {
         return PlatformIsMusicPlaying();
     }
-
-
 }

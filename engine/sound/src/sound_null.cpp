@@ -91,6 +91,11 @@ namespace dmSound
         return RESULT_OK;
     }
 
+    Result StreamSoundInstance(HSoundInstance sound_instance, char* buffer, uint32_t size, uint32_t* left)
+    {
+        return RESULT_UNSUPPORTED;
+    }
+
     Result SetInstanceGroup(HSoundInstance instance, const char* group_name)
     {
         // NOTE: Not supported.

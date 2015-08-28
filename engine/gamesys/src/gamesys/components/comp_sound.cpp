@@ -116,6 +116,7 @@ namespace dmGameSystem
                     }
                     else if (!dmSound::IsPlaying(entry.m_SoundInstance))
                     {
+                        dmLogWarning("Sound stopped :(");
                         dmResource::Release(entry.m_Factory, entry.m_Sound);
                         dmSound::Result r = dmSound::DeleteSoundInstance(entry.m_SoundInstance);
                         entry.m_SoundInstance = 0;
@@ -133,6 +134,25 @@ namespace dmGameSystem
                         {
                             dmLogError("Error deleting sound: (%d)", r);
                             update_result = dmGameObject::UPDATE_RESULT_UNKNOWN_ERROR;
+                        }
+                    }
+                    else 
+                    {
+                        // Check if there is room in the stream buffer; if so, make request
+                        uint32_t left;
+                        dmSound::Result r = dmSound::StreamSoundInstance(entry.m_SoundInstance, 0, 0, &left);
+                        if (r == dmSound::RESULT_OK && left > 0)
+                        {
+                            const dmhash_t message_id = dmGameSystemDDF::SoundBufferRequest::m_DDFDescriptor->m_NameHash;
+                            dmGameSystemDDF::SoundBufferRequest req;
+                            req.m_StreamId = i;
+                            req.m_Bytes = left;
+                            
+                            dmMessage::URL receiver;
+                            dmMessage::ResetURL(receiver);
+                            receiver.m_Socket = dmGameObject::GetMessageSocket(dmGameObject::GetCollection(entry.m_Instance));
+                            receiver.m_Path = dmGameObject::GetIdentifier(entry.m_Instance);
+                            dmMessage::Post(0x0, &receiver, message_id, 0, (uintptr_t)dmGameSystemDDF::SoundBufferRequest::m_DDFDescriptor, &req, sizeof(dmGameSystemDDF::SoundBufferRequest));
                         }
                     }
                 }
@@ -240,6 +260,32 @@ namespace dmGameSystem
                 if (entry.m_SoundInstance != 0 && entry.m_Sound == (Sound*) *params.m_UserData && entry.m_Instance == params.m_Instance)
                 {
                     entry.m_StopRequested = 1;
+                }
+            }
+        }
+        else if (params.m_Message->m_Descriptor == (uintptr_t)dmGameSystemDDF::SoundBufferSubmit::m_DDFDescriptor)
+        {
+            World* world = (World*)params.m_World;
+            
+            dmGameSystemDDF::SoundBufferSubmit* submit = (dmGameSystemDDF::SoundBufferSubmit*) params.m_Message->m_Data;
+            if (submit->m_StreamId < world->m_Entries.Size())
+            {
+                PlayEntry& entry = world->m_Entries[submit->m_StreamId];
+                
+                uintptr_t ofs = (char*)submit->m_Samples.m_Data - (char*)0;
+                float *data = (float*)&(((char*)submit)[ofs]);
+                
+                int16_t smp[65536];
+                for (uint32_t i=0;i<submit->m_Samples.m_Count;i++)
+                {
+                    smp[i] = data[i] * 32765;
+                }
+                
+                uint32_t left = 0;
+                dmSound::Result r = dmSound::StreamSoundInstance(entry.m_SoundInstance, (char*)smp, submit->m_Samples.m_Count * 2, &left);
+                if (r != dmSound::RESULT_OK)
+                {
+                    dmLogError("Stream buffer full");
                 }
             }
         }

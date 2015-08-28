@@ -99,5 +99,5 @@ namespace dmSoundCodec
 
     DM_DECLARE_SOUND_DECODER(AudioDecoderStbVorbis, "VorbisDecoderStb", FORMAT_VORBIS,
                              5, // baseline score (1-10)
-                             StbVorbisOpenStream, StbVorbisCloseStream, StbVorbisDecode, StbVorbisResetStream, StbVorbisSkipInStream, StbVorbisGetInfo);
+                             StbVorbisOpenStream, StbVorbisCloseStream, StbVorbisDecode, StbVorbisResetStream, StbVorbisSkipInStream, 0, StbVorbisGetInfo);
 }

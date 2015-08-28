@@ -427,6 +427,8 @@ namespace dmSound
             codec_format = dmSoundCodec::FORMAT_WAV;
         } else if (sound_data->m_Type == SOUND_DATA_TYPE_OGG_VORBIS) {
             codec_format = dmSoundCodec::FORMAT_VORBIS;
+        } else if (sound_data->m_Type == SOUND_DATA_TYPE_RAW) {
+            codec_format = dmSoundCodec::FORMAT_RAW;
         } else {
             assert(0);
         }
@@ -456,6 +458,14 @@ namespace dmSound
         *sound_instance = si;
 
         return RESULT_OK;
+    }
+    
+    Result StreamSoundInstance(HSoundInstance sound_instance, char* buffer, uint32_t size, uint32_t* left)
+    {
+        SoundSystem* sound = g_SoundSystem;
+        if (dmSoundCodec::RESULT_OK == dmSoundCodec::Feed(sound->m_CodecContext, sound_instance->m_Decoder, buffer, size, left))
+            return RESULT_OK;
+        return RESULT_UNSUPPORTED;
     }
 
     Result DeleteSoundInstance(HSoundInstance sound_instance)

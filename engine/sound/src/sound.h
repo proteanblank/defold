@@ -16,6 +16,7 @@ namespace dmSound
     {
         SOUND_DATA_TYPE_WAV        = 0,
         SOUND_DATA_TYPE_OGG_VORBIS = 1,
+        SOUND_DATA_TYPE_RAW        = 2
     };
 
     enum Parameter
@@ -81,6 +82,7 @@ namespace dmSound
 
     Result NewSoundInstance(HSoundData sound_data, HSoundInstance* sound_instance);
     Result DeleteSoundInstance(HSoundInstance sound_instance);
+    Result StreamSoundInstance(HSoundInstance sound_instance, char* buffer, uint32_t size, uint32_t* left);
 
     Result SetInstanceGroup(HSoundInstance instance, const char* group);
     Result SetInstanceGroup(HSoundInstance instance, dmhash_t group_hash);

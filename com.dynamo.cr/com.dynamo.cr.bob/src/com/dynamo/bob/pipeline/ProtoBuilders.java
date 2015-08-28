@@ -283,7 +283,9 @@ public class ProtoBuilders {
         @Override
         protected SoundDesc.Builder transform(Task<Void> task, IResource resource, SoundDesc.Builder messageBuilder)
                 throws IOException, CompileExceptionError {
-            BuilderUtil.checkResource(this.project, resource, "sound", messageBuilder.getSound());
+            if (!messageBuilder.getSound().isEmpty()) {
+                BuilderUtil.checkResource(this.project, resource, "sound", messageBuilder.getSound());
+            }
             messageBuilder.setSound(BuilderUtil.replaceExt(messageBuilder.getSound(), "wav", "wavc"));
             messageBuilder.setSound(BuilderUtil.replaceExt(messageBuilder.getSound(), "ogg", "oggc"));
             return messageBuilder;

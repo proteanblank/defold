@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdint.h>
 
+#include <dlib/log.h>
+
 #include "sound_codec.h"
 #include "sound_decoder.h"
 
@@ -41,6 +43,7 @@ namespace dmSoundCodec
 
         while (decoder)
         {
+            dmLogWarning("match %d %d", decoder->m_Format, format);
             if (decoder->m_Format != format)
             {
                 decoder = decoder->m_Next;

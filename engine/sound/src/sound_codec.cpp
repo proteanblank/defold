@@ -95,6 +95,16 @@ namespace dmSoundCodec
         return decoder->m_DecoderInfo->m_SkipInStream(decoder->m_Stream, bytes, skipped);
     }
 
+    Result Feed(HCodecContext context, HDecoder decoder, char* buffer, uint32_t bytes, uint32_t* left)
+    {
+        assert(context);
+        assert(decoder);
+        if (decoder->m_DecoderInfo->m_Feed)
+            return decoder->m_DecoderInfo->m_Feed(decoder->m_Stream, buffer, bytes, left);
+        *left = 0;
+        return RESULT_UNSUPPORTED;
+    }
+
     Result Reset(HCodecContext context, HDecoder decoder)
     {
         assert(decoder);

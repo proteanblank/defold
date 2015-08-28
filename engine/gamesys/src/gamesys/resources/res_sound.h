@@ -20,6 +20,7 @@ namespace dmGameSystem
         bool m_Looping;
         dmhash_t m_GroupHash;
         float    m_Gain;
+        bool     m_LoadedFromResource;
     };
 
     dmResource::Result ResSoundPreload(dmResource::HFactory factory, dmResource::HPreloadHintInfo hint_info,

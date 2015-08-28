@@ -14,11 +14,12 @@ def build(bld):
     stb_vorbis = 'decoders/decoder_stb_vorbis.cpp stb_vorbis/stb_vorbis.c'.split()
     wav = ['decoders/decoder_wav.cpp']
     tremolo = ['decoders/decoder_tremolo.cpp'];
+    raw = ['decoders/decoder_raw.cpp']
 
     if bld.env.PLATFORM == 'js-web' or bld.env.PLATFORM == 'win32':
-        decoders = stb_vorbis + wav
+        decoders = stb_vorbis + wav + raw
     else:
-        decoders = tremolo + stb_vorbis + wav
+        decoders = tremolo + stb_vorbis + wav + raw
 
     source = source + decoders
     source2 = source2 + decoders

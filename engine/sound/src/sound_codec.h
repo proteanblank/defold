@@ -30,6 +30,7 @@ namespace dmSoundCodec
     enum Format
     {
         FORMAT_WAV,   //!< FORMAT_WAV
+        FORMAT_RAW,
         FORMAT_VORBIS,//!< FORMAT_VORBIS
     };
 
@@ -121,6 +122,12 @@ namespace dmSoundCodec
      * @return RESULT_OK on success
      */
     Result Skip(HCodecContext context, HDecoder decoder, uint32_t bytes, uint32_t* skipped);
+
+    /**
+     * Feed stream data
+     * @return RESULT_OK on success
+     */
+    Result Feed(HCodecContext context, HDecoder decoder, char* buffer, uint32_t bytes, uint32_t* left);
 
     /**
      * Reset decoder

@@ -107,3 +107,15 @@ message ResetConstantParticleFX
     required uint64         emitter_id  = 1;
     required uint64         name_hash   = 2;
 }
+
+message SoundBufferRequest
+{
+    required int32 stream_id = 1;
+    required int32 bytes = 2;
+}
+
+message SoundBufferSubmit
+{
+    required int32 stream_id = 1;
+    repeated float samples = 2;
+}
