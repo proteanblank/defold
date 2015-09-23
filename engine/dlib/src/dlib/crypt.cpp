@@ -15,12 +15,10 @@ namespace dmCrypt
         uint32_t v1 = (uint32_t) (v & 0xffffffff);
 
         uint32_t sum = 0, delta = 0x9e3779b9;
-        //printf("---------------\n");
         for (uint32_t i = 0; i < NUM_ROUNDS; i++) {
             v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + dmEndian::ToHost(key[sum & 3]));
             sum += delta;
             v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + dmEndian::ToHost(key[(sum>>11) & 3]));
-            //printf("v0, v1: 0x%x, 0x%x\n", v0, v1);
         }
         uint64_t ret = dmEndian::ToHost((((uint64_t) v0) << 32 | v1));
         return ret;

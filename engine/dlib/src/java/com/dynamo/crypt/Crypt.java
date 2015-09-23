@@ -7,8 +7,6 @@ public class Crypt {
     private static int[] toIntArray(byte[] data, int n) {
         int[] result = new int[n >> 2];
         for (int i = 0; i < data.length; ++i) {
-            //System.out.println(i + ", " + ((3 - (i & 3)) << 3));
-            // result[i >>> 2] |= (0x000000ff & data[i]) << ((i & 3) << 3);
             result[i >>> 2] |= (0x000000ff & data[i]) << ((3 - (i & 3)) << 3);
         }
         return result;
@@ -19,7 +17,6 @@ public class Crypt {
         byte[] result = new byte[n];
 
         for (int i = 0; i < n; ++i) {
-            // result[i] = (byte) (data[i >>> 2] >>> ((i & 3) << 3));
             result[i] = (byte) (data[i >>> 2] >>> ((3 - (i & 3)) << 3));
         }
         return result;
@@ -34,10 +31,7 @@ public class Crypt {
             v0 += (((v1 << 4) ^ (v1 >>> 5)) + v1) ^ (sum + key[sum & 3]);
             sum += delta;
             v1 += (((v0 << 4) ^ (v0 >>> 5)) + v0) ^ (sum + key[(sum >>> 11) & 3]);
-
-            //System.out.format("v0, v1: 0x%x, 0x%x%n", v0, v1);
         }
-        // return new int[] {v1, v0};
         return new int[] { v0, v1 };
     }
 
@@ -49,16 +43,15 @@ public class Crypt {
 
         for (int i = 0; i < data.length; i++) {
             if (i % 8 == 0) {
-                // TODO: Include overflow
+                // TODO: Include overflow. Did I mean overflow to counter[0]?
                 enc_counter = toByteArray(encrypt(counter, int_key));
                 counter[1]++;
             }
             result[i] = (byte) ((data[i] ^ enc_counter[i % 8]) & 0xff);
-            // result[i] = (byte) ((data[i] ^ enc_counter[7 - (i % 8)]) & 0xff);
         }
         return result;
     }
-    
+
     public static byte[] decryptCTR(byte[] data, byte[] key) {
         return encryptCTR(data, key);
     }
