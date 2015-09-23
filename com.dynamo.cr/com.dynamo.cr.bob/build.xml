@@ -7,6 +7,7 @@
         <fileset dir="../com.dynamo.cr.common/ext" includes="protobuf-java*.jar"/>
         <fileset dir="../com.dynamo.cr.common/ext" includes="commons*.jar"/>
         <fileset dir="../com.dynamo.cr.common/ext" includes="vecmath.jar"/>
+        <fileset dir="${env.DYNAMO_HOME}/share/java" includes="upnp.jar"/>
         <fileset dir="lib" includes="*.jar"/>
     </path>
 
@@ -191,6 +192,9 @@
             <zipgroupfileset dir="lib">
               <include name="*.jar"/>
             </zipgroupfileset>
+            <zipgroupfileset dir="${env.DYNAMO_HOME}/share/java">
+              <include name="upnp.jar"/>
+            </zipgroupfileset>
          </jar>
 
         <jar destfile="dist/bob-light.jar">
@@ -226,6 +230,9 @@
             <zipgroupfileset dir="lib">
                 <include name="*.jar"/>
                 <exclude name="android.jar"/>
+            </zipgroupfileset>
+            <zipgroupfileset dir="${env.DYNAMO_HOME}/share/java">
+              <include name="upnp.jar"/>
             </zipgroupfileset>
          </jar>
 

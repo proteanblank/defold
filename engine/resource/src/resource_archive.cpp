@@ -3,7 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "resource_archive.h"
-#include "dlib/lz4.h"
+#include <dlib/lz4.h>
+#include <dlib/crypt.h>
 
 #if defined(__linux__) || defined(__MACH__) || defined(__EMSCRIPTEN__) || defined(__AVM2__)
 #include <netinet/in.h>
@@ -15,7 +16,13 @@
 
 namespace dmResourceArchive
 {
-    const static uint32_t VERSION = 3;
+    const static uint32_t VERSION = 4;
+    const char* KEY = "aQj8CScgNP4VsfXK";
+
+    enum EntryFlag
+    {
+        ENTRY_FLAG_ENCRYPTED = 1 << 0,
+    };
 
     struct Entry
     {
@@ -24,6 +31,7 @@ namespace dmResourceArchive
         uint32_t m_ResourceSize;
         // 0xFFFFFFFF if uncompressed
         uint32_t m_ResourceCompressedSize;
+        uint32_t m_Flags;
     };
 
     struct Meta
@@ -191,6 +199,7 @@ bail:
                 entry->m_Offset = htonl(file_entry->m_ResourceOffset);
                 entry->m_Size = htonl(file_entry->m_ResourceSize);
                 entry->m_CompressedSize = htonl(file_entry->m_ResourceCompressedSize);
+                entry->m_Entry = file_entry;
                 return RESULT_OK;
             }
         }
@@ -198,7 +207,7 @@ bail:
         return RESULT_NOT_FOUND;
     }
 
-    Result Read(HArchive archive, EntryInfo* entry_info, void* buffer)
+    static Result ReadAndDecompress(HArchive archive, EntryInfo* entry_info, void* buffer)
     {
         uint32_t size = entry_info->m_Size;
         uint32_t compressed_size = entry_info->m_CompressedSize;
@@ -273,6 +282,20 @@ bail:
                 return RESULT_OK;
             }
         }
+    }
+
+    Result Read(HArchive archive, EntryInfo* entry_info, void* buffer)
+    {
+        Result r = ReadAndDecompress(archive, entry_info, buffer);
+        Entry* entry = (Entry*) entry_info->m_Entry;
+        uint32_t flags = htonl(entry->m_Flags);
+        if (r == RESULT_OK && (flags & ENTRY_FLAG_ENCRYPTED)) {
+            dmCrypt::Result cr = dmCrypt::Encrypt(dmCrypt::ALGORITHM_XTEA, (uint8_t*) buffer, entry_info->m_Size, (const uint8_t*) KEY, strlen(KEY));
+            if (cr != dmCrypt::RESULT_OK) {
+                r = RESULT_UNKNOWN;
+            }
+        }
+        return r;
     }
 
     uint32_t GetEntryCount(HArchive archive)

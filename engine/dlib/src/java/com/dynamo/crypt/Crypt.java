@@ -1,0 +1,72 @@
+package com.dynamo.crypt;
+
+public class Crypt {
+
+    private final static int NUM_ROUNDS = 32;
+
+    private static int[] toIntArray(byte[] data, int n) {
+        int[] result = new int[n >> 2];
+        for (int i = 0; i < data.length; ++i) {
+            //System.out.println(i + ", " + ((3 - (i & 3)) << 3));
+            // result[i >>> 2] |= (0x000000ff & data[i]) << ((i & 3) << 3);
+            result[i >>> 2] |= (0x000000ff & data[i]) << ((3 - (i & 3)) << 3);
+        }
+        return result;
+    }
+
+    private static byte[] toByteArray(int[] data) {
+        int n = data.length << 2;
+        byte[] result = new byte[n];
+
+        for (int i = 0; i < n; ++i) {
+            // result[i] = (byte) (data[i >>> 2] >>> ((i & 3) << 3));
+            result[i] = (byte) (data[i >>> 2] >>> ((3 - (i & 3)) << 3));
+        }
+        return result;
+    }
+
+    private static int[] encrypt(int[] v, int[] key) {
+        int sum = 0;
+        int delta = 0x9e3779b9;
+        int v0 = v[0];
+        int v1 = v[1];
+        for (int i = 0; i < NUM_ROUNDS; i++) {
+            v0 += (((v1 << 4) ^ (v1 >>> 5)) + v1) ^ (sum + key[sum & 3]);
+            sum += delta;
+            v1 += (((v0 << 4) ^ (v0 >>> 5)) + v0) ^ (sum + key[(sum >>> 11) & 3]);
+
+            //System.out.format("v0, v1: 0x%x, 0x%x%n", v0, v1);
+        }
+        // return new int[] {v1, v0};
+        return new int[] { v0, v1 };
+    }
+
+    public static byte[] encryptCTR(byte[] data, byte[] key) {
+        byte[] result = new byte[data.length];
+        int[] counter = new int[2];
+        byte[] enc_counter = new byte[8];
+        int[] int_key = toIntArray(key, 16);
+
+        for (int i = 0; i < data.length; i++) {
+            if (i % 8 == 0) {
+                // TODO: Include overflow
+                enc_counter = toByteArray(encrypt(counter, int_key));
+                counter[1]++;
+            }
+            result[i] = (byte) ((data[i] ^ enc_counter[i % 8]) & 0xff);
+            // result[i] = (byte) ((data[i] ^ enc_counter[7 - (i % 8)]) & 0xff);
+        }
+        return result;
+    }
+    
+    public static byte[] decryptCTR(byte[] data, byte[] key) {
+        return encryptCTR(data, key);
+    }
+
+    public static void main(String[] args) {
+        byte[] enc = encryptCTR("ABCDEFGH12345678XYZ".getBytes(), "12345678abcdefgh".getBytes());
+        for (int i = 0; i < enc.length; i++) {
+            System.out.format("0x%x%n", enc[i]);
+        }
+    }
+}
