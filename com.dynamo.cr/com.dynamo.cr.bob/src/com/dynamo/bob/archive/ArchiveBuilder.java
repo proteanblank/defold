@@ -170,6 +170,10 @@ public class ArchiveBuilder {
             outFile.writeInt(resourcesOffset.get(i));
             outFile.writeInt(e.size);
             outFile.writeInt(e.compressedSize);
+            String ext = FilenameUtils.getExtension(e.fileName);
+            if (ENCRYPTED_EXTS.indexOf(ext) != -1) {
+                e.flags = Entry.FLAG_ENCRYPTED;
+            }
             outFile.writeInt(e.flags);
             ++i;
         }
@@ -177,8 +181,7 @@ public class ArchiveBuilder {
         i = 0;
         for (Entry e : entries) {
             String ext = FilenameUtils.getExtension(e.fileName);
-            if (ENCRYPTED_EXTS.indexOf(ext) != -1) {
-                e.flags = Entry.FLAG_ENCRYPTED;
+            if ((e.flags & Entry.FLAG_ENCRYPTED) == Entry.FLAG_ENCRYPTED) {
                 outFile.seek(resourcesOffset.get(i));
                 int size = e.size;
                 if (e.compressedSize != 0xffffffff) {
