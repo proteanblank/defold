@@ -47,6 +47,7 @@ namespace dmResourceArchive
         // 0xFFFFFFFF if uncompressed
         uint32_t    m_CompressedSize;
         uint32_t    m_Offset; // For internal use
+        uint32_t    m_Flags;  // For internal use
         void*       m_Entry;  // For internal use
     };
 

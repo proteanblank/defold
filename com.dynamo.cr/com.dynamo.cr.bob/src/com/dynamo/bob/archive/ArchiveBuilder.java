@@ -191,7 +191,7 @@ public class ArchiveBuilder {
                 outFile.read(buf);
                 byte[] enc = Crypt.encryptCTR(buf, KEY);
                 outFile.seek(resourcesOffset.get(i));
-                outFile.write(enc);;
+                outFile.write(enc);
             }
             ++i;
         }
