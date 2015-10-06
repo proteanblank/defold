@@ -29,7 +29,7 @@ namespace dmResource
             return RESULT_RESOURCE_NOT_FOUND;
         }
         
-        void *map = AAssetManager_getBuffer(asset);
+        const void *map = AAsset_getBuffer(asset);
         if (!map)
         {
             return RESULT_IO_ERROR;
@@ -53,7 +53,7 @@ namespace dmResource
         MountInfo* info = (MountInfo*) mount_info;
         if (info)
         {
-            AAssetManager_close(info->asset);
+            AAsset_close(info->asset);
             delete info;
         }
     }
