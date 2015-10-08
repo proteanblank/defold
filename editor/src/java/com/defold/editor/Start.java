@@ -187,6 +187,14 @@ public class Start extends Application {
     }
 
     public static void main(String[] args) throws Exception {
+    	try {
+    		// this is where the security manager is brought up, let's add it to be brougth up with a "policy" file.
+            // this would be the first PoC.
+            SecurityManager securityManager = new SecurityManager();
+            System.setSecurityManager(securityManager);
+    	} catch (SecurityException se) {
+            System.out.println(se);
+    	}
         createdFromMain = true;
         Start.launch(args);
     }
