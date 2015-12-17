@@ -5,7 +5,6 @@
             [internal.graph :as ig]
             [internal.graph.types :as gt]
             [internal.history :as h]
-            [internal.transaction :as it]
             [service.log :as log])
   (:import [java.util.concurrent.atomic AtomicLong]))
 
@@ -72,7 +71,7 @@
     (-> (map-vals deref graphs)
         (ig/multigraph-basis)
         (ig/hydrate-after-undo graph)
-        (it/update-successors* outputs-to-refresh)
+        (ig/update-successors outputs-to-refresh)
         (get-in [:graphs gid]))))
 
 (defn step-through-history
@@ -125,7 +124,7 @@
 (defn graph-time     [s gid] (-> s (graph gid) :tx-id))
 (defn graph-history  [s gid] (-> s (graph gid) :history))
 (defn basis          [s]     (ig/multigraph-basis (map-vals deref (graphs s))))
-
+(defn id-generators  [s]     (-> s :id-generators))
 
 (defn- make-initial-graph
   [{graph :initial-graph :or {graph (assoc (ig/empty-graph) :_gid 0)}}]
@@ -140,9 +139,13 @@
   (let [used (into #{} (keys (graphs s)))]
     (first (drop-while used (range 0 gt/MAX-GROUP-ID)))))
 
+(defn next-node-id*
+  [id-generators gid]
+  (gt/make-node-id gid (.getAndIncrement ^AtomicLong (get id-generators gid))))
+
 (defn next-node-id
   [s gid]
-  (gt/make-node-id gid (.getAndIncrement ^AtomicLong (get-in s [:id-generators gid]))))
+  (next-node-id* (id-generators s) gid))
 
 (defn- attach-graph*
   [s gref]

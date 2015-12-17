@@ -26,6 +26,8 @@
 
 (namespaces/import-vars [internal.node has-input? has-output? has-property? merge-display-order])
 
+(namespaces/import-vars [internal.property make-property-type])
+
 (namespaces/import-vars [schema.core Any Bool Inst Int Keyword Num Regex Schema Str Symbol Uuid both check enum protocol maybe fn-schema one optional-key pred recursive required-key validate])
 
 (namespaces/import-vars [internal.graph.types always PropertyType property-value-type property-default-value property-tags property-type? Properties])
@@ -70,7 +72,7 @@
   ([node-id]
    (node-type* (now) node-id))
   ([basis node-id]
-   (gt/node-type (ig/node-by-id-at basis node-id))))
+   (gt/node-type (ig/node-by-id-at basis node-id) basis)))
 
 (defn cache "The system cache of node values"
   []
@@ -137,8 +139,9 @@
   [txs]
   (when *tps-debug*
     (send-off tps-counter tick (System/nanoTime)))
-  (let [basis     (ig/multigraph-basis (util/map-vals deref (is/graphs @*the-system*)))
-        tx-result (it/transact* (it/new-transaction-context basis) txs)]
+  (let [basis     (is/basis @*the-system*)
+        id-gens   (is/id-generators @*the-system*)
+        tx-result (it/transact* (it/new-transaction-context basis id-gens) txs)]
     (when (= :ok (:status tx-result))
       (dosync
        (merge-graphs @*the-system* basis (get-in tx-result [:basis :graphs]) (:graphs-modified tx-result) (:outputs-modified tx-result))
@@ -300,9 +303,10 @@
        (let [description#    ~(in/node-type-forms symb (concat node-intrinsics forms))
              replacing#      (if-let [x# (and (resolve '~symb) (var-get (resolve '~symb)))]
                                (when (satisfies? NodeType x#) x#))
+             basis#          (is/basis @*the-system*)
              all-graphs#     (util/map-vals deref (is/graphs @*the-system*))
              to-be-replaced# (when (and all-graphs# replacing#)
-                               (filterv #(= replacing# (node-type %)) (mapcat ig/node-values (vals all-graphs#))))
+                               (filterv #(= replacing# (node-type % basis#)) (mapcat ig/node-values (vals all-graphs#))))
              ctor#           (fn [args#] (~ctor-name (merge (in/defaults ~symb) args#)))]
          (def ~symb (in/make-node-type (assoc description# :dynamo.graph/ctor ctor#)))
          (in/declare-node-value-function-names '~symb ~symb)
@@ -535,6 +539,10 @@
   `g/update-property! node-id :int-prop inc)`"
   [node-id p f & args]
   (transact (apply update-property node-id p f args)))
+
+(defn clear-property
+  [node-id p]
+  (it/clear-property node-id p))
 
 (defn set-graph-value
  "Create the transaction step to attach a named value to a graph. It will take effect when the transaction is
@@ -831,11 +839,12 @@
   (ig/pre-traverse basis root-ids (partial predecessors pred)))
 
 (defn default-node-serializer
-  [node]
-  (let [property-labels        (keys (-> node gt/property-types))
-        all-node-properties    (select-keys node property-labels)
+  [basis node]
+  (let [node-id (gt/node-id node)
+        property-labels (keys (-> node (gt/property-types basis)))
+        all-node-properties (reduce (fn [props label] (assoc props label (node-value node-id label :basis basis))) {} property-labels)
         properties-without-fns (util/filterm (comp not fn? val) all-node-properties)]
-    {:node-type  (gt/node-type node)
+    {:node-type  (gt/node-type node basis)
      :properties properties-without-fns}))
 
 (def opts-schema {(optional-key :traverse?) Runnable
@@ -870,12 +879,12 @@
   Example:
 
   `(g/copy root-ids {:traverse? (comp not resource? #(nth % 3))
-                     :serializer (some-fn custom-serializer default-node-serializer %)}"
+                     :serializer (some-fn custom-serializer default-node-serializer %)})"
   ([root-ids opts]
    (copy (now) root-ids opts))
   ([basis root-ids {:keys [traverse? serializer] :or {traverse? (constantly false) serializer default-node-serializer} :as opts}]
     (validate opts-schema opts)
-   (let [serializer     #(assoc (serializer (ig/node-by-id-at basis %2)) :serial-id %1)
+   (let [serializer     #(assoc (serializer basis (ig/node-by-id-at basis %2)) :serial-id %1)
          original-ids   (input-traverse basis traverse? root-ids)
          replacements   (zipmap original-ids (map-indexed serializer original-ids))
          serial-ids     (util/map-vals :serial-id replacements)
@@ -927,6 +936,40 @@
      {:root-node-ids (map id-dictionary (:roots fragment))
       :nodes         node-ids
       :tx-data       (into node-txs connect-txs)})))
+
+;; ---------------------------------------------------------------------------
+;; Sub-graph instancing
+;; ---------------------------------------------------------------------------
+(defn- traverse-cascade-delete [[src-id src-label tgt-id tgt-label]]
+  ((cascade-deletes (node-type* tgt-id)) tgt-label))
+
+(defn- make-override-node
+  [graph-id original-node-id opts]
+  (in/make-override-node (is/next-node-id @*the-system* graph-id) original-node-id {} opts))
+
+(defn override
+  ([root-id opts]
+    (override (now) root-id opts))
+  ([basis root-id {:keys [traverse?] :or {traverse? (constantly true)}}]
+    (let [graph-id (node-id->graph-id root-id)
+          pred (every-pred traverse-cascade-delete traverse?)
+          node-ids (ig/pre-traverse basis [root-id] (partial predecessors pred))
+          opts {:traverse-fn traverse?}
+          overrides (mapv #(make-override-node graph-id % opts) node-ids)
+          new-node-ids (map gt/node-id overrides)
+          orig->new (zipmap node-ids new-node-ids)
+          new-tx-data (map it/new-node overrides)
+          arcs (connecting-arcs basis node-ids)
+          conn-tx-data (map (fn [arc] (it/connect (orig->new (:source arc)) (:sourceLabel arc) (orig->new (:target arc)) (:targetLabel arc))) arcs)
+          override-tx-data (map (fn [node-id new-id] (it/override-node node-id new-id)) node-ids new-node-ids)]
+      {:id-mapping orig->new
+       :tx-data (concat new-tx-data conn-tx-data override-tx-data)})))
+
+(defn overrides
+  ([root-id]
+    (overrides (now) root-id))
+  ([basis root-id]
+    (ig/overrides basis root-id)))
 
 ;; ---------------------------------------------------------------------------
 ;; Boot, initialization, and facade

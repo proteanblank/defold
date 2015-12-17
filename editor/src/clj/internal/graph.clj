@@ -48,10 +48,14 @@
 (defn node        [g id]   (get-in g [:nodes id]))
 (defn add-node    [g id n] (assoc-in g [:nodes id] n))
 
+(remove #{3} '(3))
+
 (defn remove-node
-  [g n]
+  [g n original]
   (-> g
       (update :nodes dissoc n)
+      (cond->
+        original (update-in [:node->overrides original] (partial remove #{n})))
       (update :sarcs dissoc n)
       (update :sarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.target arc))) arcs)) %))
       (update :tarcs dissoc n)
@@ -70,10 +74,10 @@
     (update-in g [:sarcs source] conjv (arc source target source-label target-label))))
 
 (defn connect-target
-  [g source source-label target target-label]
+  [g target-type source source-label target target-label]
   (let [to (node g target)]
     (assert (not (nil? to)) (str "Attempt to connect " (pr-str source source-label target target-label)))
-    (assert (some #{target-label} (-> to gt/node-type gt/input-labels)) (str "No label " target-label " exists on node " to))
+    (assert (some #{target-label} (-> target-type gt/input-labels)) (str "No label " target-label " exists on node " to))
     (update-in g [:tarcs target] conjv (arc source target source-label target-label))))
 
 (defn source-connected?
@@ -155,9 +159,9 @@
 
 (defn- assert-type-compatible
   [basis src-id src-label tgt-id tgt-label]
-  (let [output-type   (gt/node-type (node-by-id-at basis src-id))
+  (let [output-type   (gt/node-type (node-by-id-at basis src-id) basis)
         output-schema (gt/output-type output-type src-label)
-        input-type    (gt/node-type (node-by-id-at basis tgt-id))
+        input-type    (gt/node-type (node-by-id-at basis tgt-id) basis)
         input-schema  (gt/input-type input-type tgt-label)]
     (assert output-schema
             (format "Attempting to connect %s (a %s) %s to %s (a %s) %s, but %s does not have an output or property named %s"
@@ -178,18 +182,26 @@
 ;; ---------------------------------------------------------------------------
 ;; Dependency tracing
 ;; ---------------------------------------------------------------------------
+(defn overrides [basis node-id]
+  (let [gid (gt/node-id->graph-id node-id)]
+    (get-in basis [:graphs gid :node->overrides node-id])))
+
 (defn index-successors
   [basis node-id-output-pair]
   (let [gather-node-dependencies-fn (fn [[id label]]
                                       (some-> (node-by-id-at basis id)
-                                              gt/node-type
+                                              (gt/node-type basis)
                                               gt/input-dependencies
                                               (get label)
                                               (->> (mapv (partial vector id)))))
         same-node-dep-pairs         (conj (gather-node-dependencies-fn node-id-output-pair) node-id-output-pair)
+        override-pairs              (for [[id label] same-node-dep-pairs
+                                          override (overrides basis id)]
+                                      [override label])
         target-inputs               (mapcat (fn [[id label]] (gt/targets basis id label)) same-node-dep-pairs)]
     (apply set/union
            same-node-dep-pairs
+           override-pairs
            (mapv gather-node-dependencies-fn target-inputs))))
 
 (defn- successors
@@ -220,7 +232,18 @@
 
   (arcs-by-tail
     [this node-id]
-    (get-in (node-id->graph graphs node-id) [:tarcs node-id]))
+    (let [arcs (get-in (node-id->graph graphs node-id) [:tarcs node-id])]
+      (if-let [original (gt/original-node this node-id)]
+        (let [arcs (loop [arcs (group-by :targetLabel arcs)
+                          node-id original]
+                     (if node-id
+                       (recur (merge (->> (get-in (node-id->graph graphs node-id) [:tarcs node-id])
+                                       (group-by :targetLabel))
+                                     arcs)
+                              (gt/original-node this node-id))
+                       arcs))]
+          (mapcat second arcs))
+        arcs)))
 
   (arcs-by-head
     [this node-id]
@@ -267,7 +290,7 @@
     [this node-id]
     (let [node  (node-by-id-at this node-id)
           gid   (gt/node-id->graph-id node-id)
-          graph (remove-node (node-id->graph graphs node-id) node-id)]
+          graph (remove-node (node-id->graph graphs node-id) node-id (gt/original node))]
       [(update this :graphs assoc gid graph) node]))
 
   (replace-node
@@ -277,22 +300,28 @@
           graph    (assoc-in (get graphs gid) [:nodes node-id] new-node)]
       [(update this :graphs assoc gid graph) new-node]))
 
+  (override-node
+    [this original-id override-id]
+    (let [gid      (gt/node-id->graph-id original-id)]
+      (update-in this [:graphs gid :node->overrides original-id] conj override-id)))
+  
   (connect
     [this src-id src-label tgt-id tgt-label]
     (let [src-gid       (gt/node-id->graph-id src-id)
           src-graph     (get graphs src-gid)
           tgt-gid       (gt/node-id->graph-id tgt-id)
-          tgt-graph     (get graphs tgt-gid)]
+          tgt-graph     (get graphs tgt-gid)
+          tgt-type      (gt/node-type (node tgt-graph tgt-id) this)]
       (assert (<= (:_volatility src-graph 0) (:_volatility tgt-graph 0)))
       (assert-type-compatible this src-id src-label tgt-id tgt-label)
       (if (= src-gid tgt-gid)
         (update this :graphs assoc
                 src-gid (-> src-graph
-                            (connect-target src-id src-label tgt-id tgt-label)
+                            (connect-target tgt-type src-id src-label tgt-id tgt-label)
                             (connect-source src-id src-label tgt-id tgt-label)))
         (update this :graphs assoc
                 src-gid (connect-source src-graph src-id src-label tgt-id tgt-label)
-                tgt-gid (connect-target tgt-graph src-id src-label tgt-id tgt-label)))))
+                tgt-gid (connect-target tgt-graph tgt-type src-id src-label tgt-id tgt-label)))))
 
   (disconnect
     [this src-id src-label tgt-id tgt-label]
@@ -316,7 +345,11 @@
 
   (dependencies
     [this to-be-marked]
-    (pre-traverse this (stackify to-be-marked) successors)))
+    (pre-traverse this (stackify to-be-marked) successors))
+  
+  (original-node [this node-id]
+    (when-let [node (node-by-id-at this node-id)]
+      (gt/original node))))
 
 (defn multigraph-basis
   [graphs]
@@ -329,3 +362,11 @@
         hydrated-graph (assoc graph-state :sarcs sarcs)
         new-basis (assoc-in basis [:graphs gid] hydrated-graph)]
     new-basis))
+
+(defn update-successors
+  [basis changes]
+  (if-let [change (first changes)]
+    (let [new-successors (index-successors basis change)
+          gid            (gt/node-id->graph-id (first change))]
+      (recur (assoc-in basis [:graphs gid :successors change] new-successors) (next changes)))
+    basis))

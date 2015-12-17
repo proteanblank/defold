@@ -55,9 +55,12 @@
 
 (defprotocol Node
   (node-id             [this]        "Return an ID that can be used to get this node (or a future value of it).")
-  (node-type           [this]        "Return the node type that created this node.")
-  (property-types      [this]        "Return the combined map of compile-time and runtime properties")
-  (produce-value       [this output evaluation-context] "Return the value of the named output"))
+  (node-type           [this basis]        "Return the node type that created this node.")
+  (property-types      [this basis]        "Return the combined map of compile-time and runtime properties")
+  (set-property        [this basis property value])
+  (clear-property      [this basis property])
+  (produce-value       [this output evaluation-context] "Return the value of the named output")
+  (original            [this]))
 
 (defn node? [v] (satisfies? Node v))
 
@@ -70,6 +73,7 @@
   (add-node         [this value]                 "returns [basis real-value]")
   (delete-node      [this node-id]               "returns [basis node]")
   (replace-node     [this node-id value]         "returns [basis node]")
+  (override-node    [this original-id override-id])
   (connect          [this src-id src-label tgt-id tgt-label])
   (disconnect       [this src-id src-label tgt-id tgt-label])
   (connected?       [this src-id src-label tgt-id tgt-label])
@@ -79,7 +83,8 @@
      outputs that use them, and so on. Continue following links until
      all reachable outputs are found.
 
-     Returns a collection of [node-id output-label] pairs."))
+     Returns a collection of [node-id output-label] pairs.")
+  (original-node    [this node-id]))
 
 (defn protocol? [x] (and (map? x) (contains? x :on-interface)))
 
@@ -94,6 +99,7 @@
                                          (s/optional-key :validation-problems) s/Any
                                          :value                                (s/either s/Any ErrorValue)
                                          :type                                 (s/protocol PropertyType)
+                                         (s/optional-key :path)                [s/Keyword]
                                          s/Keyword                             s/Any}}
                  (s/optional-key :display-order) [(s/either s/Keyword [(s/one String "category") s/Keyword])]})
 
