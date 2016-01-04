@@ -1032,6 +1032,7 @@
            (throw (ex-info (str "No such output, input, or property " label# " exists for node type " (:name ~node-type-name))
                            {:label label# :node-type ~node-type-name}))))
        (original [this] nil)
+       (override-id [this] nil)
        ~@(gt/interfaces node-type)
        ~@(gt/protocols node-type)
        ~@(map (fn [[fname [argv _]]] `(~fname ~argv ((second (get (gt/method-impls ~node-type-name) '~fname)) ~@argv))) (gt/method-impls node-type)))
@@ -1070,7 +1071,7 @@
 (defn- output-fn [type output]
   (eval (dollar-name (:name type) output)))
 
-(defrecord OverrideNode [node-id original-id properties opts]
+(defrecord OverrideNode [override-id node-id original-id properties]
   gt/Node
   (node-id             [this] node-id)
   (node-type           [this basis] (gt/node-type (ig/node-by-id-at basis original-id) basis))
@@ -1111,10 +1112,8 @@
                (if (contains? (:properties dyn-properties) output)
                  (get properties output)
                  (node-value* original output evaluation-context))))))
+  (override-id [this] override-id)
   (original [this] original-id))
 
-(defn make-override-node [node-id original-id properties {:keys [traverse-fn] :or {traverse-fn (constantly true)} :as opts}]
-  (->OverrideNode node-id original-id properties opts))
-
-(defn traverse-fn [override]
-  (get-in override [:opts :traverse-fn]))
+(defn make-override-node [override-id node-id original-id properties]
+  (->OverrideNode override-id node-id original-id properties))

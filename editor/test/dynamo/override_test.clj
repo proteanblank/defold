@@ -13,7 +13,7 @@
   (output sub-nodes [g/NodeID] (g/fnk [sub-nodes] sub-nodes))
   (output cached-output g/Str :cached (g/fnk [a-property] a-property))
   (input cached-values g/Str :array)
-  #_(output cached-values [g/Str] :cached (g/fnk [cached-values] cached-values)))
+  (output cached-values [g/Str] :cached (g/fnk [cached-values] cached-values)))
 
 (g/defnode SubNode
   (property value g/Str))
@@ -43,17 +43,17 @@
                (is (= [sub] (g/node-value main :sub-nodes)))))))
 
 (deftest default-behaviour
-  (with-clean-system
-    (let [[[main sub] [or-main or-sub]] (setup world 1)]
-      (testing "Connection is overridden from start"
+   (with-clean-system
+     (let [[[main sub] [or-main or-sub]] (setup world 1)]
+       (testing "Connection is overridden from start"
                (is (= [or-sub] (g/node-value or-main :sub-nodes)))
                (is (= or-main (g/node-value or-main :_node-id))))
-      (testing "Using base values"
-               (doseq [label [:a-property :b-property :virt-property :cached-output]]
-                 (is (= "main" (g/node-value or-main label)))))
-      (testing "Base node invalidates cache"
-               (g/transact (g/set-property main :a-property "new main"))
-               (is (= "new main" (g/node-value or-main :cached-output)))))))
+       (testing "Using base values"
+                (doseq [label [:a-property :b-property :virt-property :cached-output]]
+                  (is (= "main" (g/node-value or-main label)))))
+       (testing "Base node invalidates cache"
+                (g/transact (g/set-property main :a-property "new main"))
+                (is (= "new main" (g/node-value or-main :cached-output)))))))
 
 (deftest delete
   (with-clean-system
@@ -127,11 +127,29 @@
                                         (for [[from to] [[:_node-id :sub-nodes]
                                                          [:value :cached-values]]]
                                           (g/connect sub from main to))))]
+      (prn "sub" sub)
       (is (= ["sub"] (g/node-value or-main :cached-values)))
+      (prn "node goes")
       (g/transact (g/disconnect sub :_node-id main :sub-nodes))
+      (prn "done, testing")
       (is (= [] (g/node-value or-main :cached-values))))))
 
 (new-node-created-cache-invalidation)
+
+#_(
+
+(deftest new-node-created-cache-invalidation
+  (with-clean-system
+    (let [[main or-main] (tx-nodes (g/make-nodes world [main MainNode]
+                                                 (:tx-data (g/override main {}))))
+          _ (is (= [] (g/node-value or-main :cached-values)))
+          [sub] (tx-nodes (g/make-nodes world [sub [SubNode :value "sub"]]
+                                        (for [[from to] [[:_node-id :sub-nodes]
+                                                         [:value :cached-values]]]
+                                          (g/connect sub from main to))))]
+      (is (= ["sub"] (g/node-value or-main :cached-values)))
+      (g/transact (g/disconnect sub :_node-id main :sub-nodes))
+      (is (= [] (g/node-value or-main :cached-values))))))
 
 (deftest multi-override
   (with-clean-system
@@ -337,3 +355,4 @@
         (let [p' (get-in (g/node-value comp :_properties) [:properties :speed])]
           (is (= 0 (:value p')))
           (is (not (contains? p' :original-value))))))))
+)

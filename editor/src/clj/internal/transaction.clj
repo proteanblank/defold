@@ -47,11 +47,18 @@
   [{:type     :delete-node
     :node-id  node-id}])
 
+(defn new-override
+  [override-id root-id traverse-fn]
+  [{:type :new-override
+    :override-id override-id
+    :root-id root-id
+    :traverse-fn traverse-fn}])
+
 (defn override-node
-  [original-id override-id]
+  [original-node-id override-node-id]
   [{:type        :override-node
-    :original-id original-id
-    :override-id override-id}])
+    :original-node-id original-node-id
+    :override-node-id override-node-id}])
 
 (defn update-property
   "*transaction step* - Expects a node, a property label, and a
@@ -213,7 +220,10 @@
 (def ^:private basis-delete-node (comp first gt/delete-node))
 
 (defn- disconnect-all-inputs [ctx node-id node]
-  (reduce (fn [ctx in] (disconnect-inputs ctx node-id  in)) ctx (-> node (gt/node-type (:basis ctx)) gt/input-labels)))
+  (reduce (fn [ctx in] (disconnect-inputs ctx node-id in)) ctx (-> node (gt/node-type (:basis ctx)) gt/input-labels)))
+
+(defn- disconnect-all-outputs [ctx node-id node]
+  (reduce (fn [ctx in] (disconnect-outputs ctx node-id in)) ctx (-> node (gt/node-type (:basis ctx)) gt/output-labels)))
 
 (defn- delete-single
   [ctx node-id]
@@ -224,6 +234,7 @@
                        (-> type gt/output-labels))]
       (-> ctx
         (disconnect-all-inputs node-id node)
+        (disconnect-all-outputs node-id node)
         (update :basis basis-delete-node node-id)
         (update-in [:nodes-affected node-id] set/union all-labels)
         (assoc-in [:nodes-deleted node-id] node)
@@ -247,6 +258,11 @@
   [ctx {:keys [node-id]}]
   (ctx-delete-node ctx node-id))
 
+(defmethod perform :new-override
+  [ctx {:keys [override-id root-id traverse-fn]}]
+  (-> ctx
+    (update :basis gt/add-override override-id (ig/make-override root-id traverse-fn))))
+
 (defn- ctx-override-node [ctx original-id override-id]
   (let [basis (:basis ctx)
         original (ig/node-by-id-at basis original-id)
@@ -256,8 +272,8 @@
       (update :successors-changed into (map vector (repeat original-id) all-outputs)))))
 
 (defmethod perform :override-node
-  [ctx {:keys [original-id override-id]}]
-  (ctx-override-node ctx original-id override-id))
+  [ctx {:keys [original-node-id override-node-id]}]
+  (ctx-override-node ctx original-node-id override-node-id))
 
 (defn- node-value [basis node-id property]
   (in/node-value node-id property {:basis basis :cache nil :skip-validation true}))
@@ -346,17 +362,18 @@
       (loop [overrides (ig/overrides basis (gt/node-id target))
              ctx ctx]
         (if-let [or (first overrides)]
-          (let [or-node (ig/node-by-id-at (:basis ctx) or)
-                traverse-fn (in/traverse-fn or-node)]
+          (let [basis (:basis ctx)
+                or-node (ig/node-by-id-at basis or)
+                override-id (gt/override-id or-node)
+                traverse-fn (ig/override-traverse-fn basis override-id)]
             (if (traverse-fn source-id source-label target-id target-label)
               (let [gid (gt/node-id->graph-id or)
-                    new-sub-id (next-node-id ctx gid)
-                    new-sub-node (in/make-override-node new-sub-id source-id {} (:opts or-node))]
-                (recur (rest overrides)
-                       (-> ctx
-                         (ctx-add-node new-sub-node)
-                         (ctx-override-node source-id new-sub-id)
-                         (ctx-connect new-sub-id source-label or target-label))))
+                   new-sub-id (next-node-id ctx gid)
+                   new-sub-node (in/make-override-node override-id new-sub-id source-id {})]
+               (recur (rest overrides)
+                      (-> ctx
+                        (ctx-add-node new-sub-node)
+                        (ctx-override-node source-id new-sub-id))))
               ctx))
           ctx))
       ctx)))
@@ -383,13 +400,16 @@
     (if ((gt/cascade-deletes (gt/node-type target basis)) target-label)
       (let [source-id (gt/node-id source)
             target-id (gt/node-id target)
-            src-overrides (set (ig/overrides basis source-id))]
+            src-or-nodes (map (partial ig/node-by-id-at basis) (ig/overrides basis source-id))]
         (loop [tgt-overrides (ig/overrides basis target-id)
                ctx ctx]
           (if-let [or (first tgt-overrides)]
-            (let [or-node (ig/node-by-id-at (:basis ctx) or)
-                  traverse-fn (in/traverse-fn or-node)
-                  to-delete (filter src-overrides (map first (filter traverse-fn (gt/sources basis or target-label))))]
+            (let [basis (:basis ctx)
+                  or-node (ig/node-by-id-at basis or)
+                  override-id (gt/override-id or-node)
+                  tgt-ors (filter #(= override-id (gt/override-id %)) src-or-nodes)
+                  traverse-fn (ig/override-traverse-fn basis override-id)
+                  to-delete (ig/pre-traverse-sources basis (mapv gt/node-id tgt-ors) traverse-fn)]
               (recur (rest tgt-overrides)
                      (reduce ctx-delete-node ctx to-delete)))
             ctx)))
@@ -506,6 +526,7 @@
   ;; at this point, :outputs-modified contains [node-id output] pairs.
   ;; afterwards, it will have the transitive closure of all [node-id output] pairs
   ;; reachable from the original collection.
+  (prn "ouptuts" (get ctx :outputs-modified))
   (update ctx :outputs-modified #(gt/dependencies (:basis ctx) %)))
 
 (defn transact*

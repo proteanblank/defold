@@ -944,8 +944,8 @@
   ((cascade-deletes (node-type* tgt-id)) tgt-label))
 
 (defn- make-override-node
-  [graph-id original-node-id opts]
-  (in/make-override-node (is/next-node-id @*the-system* graph-id) original-node-id {} opts))
+  [graph-id override-id original-node-id]
+  (in/make-override-node override-id (is/next-node-id @*the-system* graph-id) original-node-id {}))
 
 (defn override
   ([root-id opts]
@@ -954,16 +954,16 @@
     (let [graph-id (node-id->graph-id root-id)
           pred (every-pred traverse-cascade-delete traverse?)
           node-ids (ig/pre-traverse basis [root-id] (partial predecessors pred))
-          opts {:traverse-fn traverse?}
-          overrides (mapv #(make-override-node graph-id % opts) node-ids)
+          override-id (is/next-override-id @*the-system* graph-id)
+          overrides (mapv (partial make-override-node graph-id override-id) node-ids)
           new-node-ids (map gt/node-id overrides)
           orig->new (zipmap node-ids new-node-ids)
           new-tx-data (map it/new-node overrides)
-          arcs (connecting-arcs basis node-ids)
-          conn-tx-data (map (fn [arc] (it/connect (orig->new (:source arc)) (:sourceLabel arc) (orig->new (:target arc)) (:targetLabel arc))) arcs)
-          override-tx-data (map (fn [node-id new-id] (it/override-node node-id new-id)) node-ids new-node-ids)]
+          override-tx-data (concat
+                             (it/new-override override-id root-id traverse?)
+                             (map (fn [node-id new-id] (it/override-node node-id new-id)) node-ids new-node-ids))]
       {:id-mapping orig->new
-       :tx-data (concat new-tx-data conn-tx-data override-tx-data)})))
+       :tx-data (concat new-tx-data override-tx-data)})))
 
 (defn overrides
   ([root-id]

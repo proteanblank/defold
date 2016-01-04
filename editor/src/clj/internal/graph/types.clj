@@ -60,6 +60,7 @@
   (set-property        [this basis property value])
   (clear-property      [this basis property])
   (produce-value       [this output evaluation-context] "Return the value of the named output")
+  (override-id         [this])
   (original            [this]))
 
 (defn node? [v] (satisfies? Node v))
@@ -74,6 +75,8 @@
   (delete-node      [this node-id]               "returns [basis node]")
   (replace-node     [this node-id value]         "returns [basis node]")
   (override-node    [this original-id override-id])
+  (add-override     [this override-id override])
+  (delete-override  [this override-id])
   (connect          [this src-id src-label tgt-id tgt-label])
   (disconnect       [this src-id src-label tgt-id tgt-label])
   (connected?       [this src-id src-label tgt-id tgt-label])
@@ -129,3 +132,11 @@
   (bit-and node-id NID-MASK))
 
 (defn node->graph-id ^long [node] (node-id->graph-id (node-id node)))
+
+(defn make-override-id ^long [^long gid ^long oid]
+  (bit-or
+   (bit-shift-left gid NID-BITS)
+   (bit-and oid 0xffffffffffffff)))
+
+(defn override-id->graph-id ^long [^long override-id]
+  (bit-and (bit-shift-right override-id NID-BITS) GID-MASK))

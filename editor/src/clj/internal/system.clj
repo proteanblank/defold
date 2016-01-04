@@ -125,6 +125,7 @@
 (defn graph-history  [s gid] (-> s (graph gid) :history))
 (defn basis          [s]     (ig/multigraph-basis (map-vals deref (graphs s))))
 (defn id-generators  [s]     (-> s :id-generators))
+(defn override-id-generator [s] (-> s :override-id-generator))
 
 (defn- make-initial-graph
   [{graph :initial-graph :or {graph (assoc (ig/empty-graph) :_gid 0)}}]
@@ -147,6 +148,14 @@
   [s gid]
   (next-node-id* (id-generators s) gid))
 
+(defn next-override-id*
+  [override-id-generator gid]
+  (gt/make-override-id gid (.getAndIncrement ^AtomicLong override-id-generator)))
+
+(defn next-override-id
+  [s gid]
+  (next-override-id* (override-id-generator s) gid))
+
 (defn- attach-graph*
   [s gref]
   (let [gid (next-available-gid s)]
@@ -154,6 +163,7 @@
     (-> s
         (assoc :last-graph gid)
         (update-in [:id-generators] assoc gid (integer-counter))
+        (assoc :override-id-generator (integer-counter))
         (update-in [:graphs] assoc gid gref))))
 
 (defn attach-graph
