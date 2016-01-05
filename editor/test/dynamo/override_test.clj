@@ -127,28 +127,10 @@
                                         (for [[from to] [[:_node-id :sub-nodes]
                                                          [:value :cached-values]]]
                                           (g/connect sub from main to))))]
-      (prn "sub" sub)
       (is (= ["sub"] (g/node-value or-main :cached-values)))
-      (prn "node goes")
-      (g/transact (g/disconnect sub :_node-id main :sub-nodes))
-      (prn "done, testing")
-      (is (= [] (g/node-value or-main :cached-values))))))
-
-(new-node-created-cache-invalidation)
-
-#_(
-
-(deftest new-node-created-cache-invalidation
-  (with-clean-system
-    (let [[main or-main] (tx-nodes (g/make-nodes world [main MainNode]
-                                                 (:tx-data (g/override main {}))))
-          _ (is (= [] (g/node-value or-main :cached-values)))
-          [sub] (tx-nodes (g/make-nodes world [sub [SubNode :value "sub"]]
-                                        (for [[from to] [[:_node-id :sub-nodes]
-                                                         [:value :cached-values]]]
-                                          (g/connect sub from main to))))]
-      (is (= ["sub"] (g/node-value or-main :cached-values)))
-      (g/transact (g/disconnect sub :_node-id main :sub-nodes))
+      (g/transact (concat
+                    (g/disconnect sub :_node-id main :sub-nodes)
+                    (g/disconnect sub :value main :cached-values)))
       (is (= [] (g/node-value or-main :cached-values))))))
 
 (deftest multi-override
@@ -183,7 +165,7 @@
                (let [error (g/error-severe {:type :som-error :message "Something went wrong"})]
                  (is (thrown? Exception (g/transact
                                           (g/mark-defective or-main error)))))))))
- 
+
 (deftest copy-paste
   (with-clean-system
     (let [[[main sub]
@@ -355,4 +337,3 @@
         (let [p' (get-in (g/node-value comp :_properties) [:properties :speed])]
           (is (= 0 (:value p')))
           (is (not (contains? p' :original-value))))))))
-)

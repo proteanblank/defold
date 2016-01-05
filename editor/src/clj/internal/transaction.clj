@@ -526,7 +526,6 @@
   ;; at this point, :outputs-modified contains [node-id output] pairs.
   ;; afterwards, it will have the transitive closure of all [node-id output] pairs
   ;; reachable from the original collection.
-  (prn "ouptuts" (get ctx :outputs-modified))
   (update ctx :outputs-modified #(gt/dependencies (:basis ctx) %)))
 
 (defn transact*

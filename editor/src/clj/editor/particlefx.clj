@@ -679,7 +679,7 @@
                        (get-in user-data [:modifier-data :label])))
   (active? [selection] (and (= 1 (count selection))
                             (let [node-id (first selection)
-                                  type (g/node-type (g/node-by-id node-id) (g/now))]
+                                  type (g/node-type (g/node-by-id node-id))]
                               (or (emitter? node-id)
                                   (pfx? node-id type)))))
   (run [user-data]
@@ -691,7 +691,7 @@
   (options [selection user-data]
            (when (not user-data)
              (let [self (let [node-id (first selection)
-                              type (g/node-type (g/node-by-id node-id) (g/now))]
+                              type (g/node-type (g/node-by-id node-id))]
                           (or (emitter? node-id)
                               (pfx? node-id type)))]
                (mapv (fn [[type data]] {:label (:label data)
@@ -744,13 +744,13 @@
                        (get-in user-data [:emitter-data :label])))
   (active? [selection] (and (= 1 (count selection))
                             (let [node-id (first selection)
-                                  type (g/node-type (g/node-by-id node-id) (g/now))]
+                                  type (g/node-type (g/node-by-id node-id))]
                               (pfx? node-id type))))
   (run [user-data] (add-emitter-handler (:_node-id user-data) (:emitter-type user-data)))
   (options [selection user-data]
            (when (not user-data)
              (let [self (let [node-id (first selection)
-                              type (g/node-type (g/node-by-id node-id) (g/now))]
+                              type (g/node-type (g/node-by-id node-id))]
                           (pfx? node-id type))]
                (mapv (fn [[type data]] {:label (:label data)
                                         :icon emitter-icon

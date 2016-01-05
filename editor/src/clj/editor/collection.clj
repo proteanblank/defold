@@ -515,7 +515,7 @@
                                    (v4->euler (:rotation embedded))
                                    [scale scale scale] false false))))
             basis (g/now)
-            new-instance-data (filter #(and (= :create-node (:type %)) (= GameObjectInstanceNode (g/node-type (:node %) basis))) tx-go-creation)
+            new-instance-data (filter #(and (= :create-node (:type %)) (= GameObjectInstanceNode (g/node-type basis (:node %)))) tx-go-creation)
             id->nid (into {} (map #(do [(get-in % [:node :id]) (g/node-id (:node %))]) new-instance-data))
             child->parent (into {} (map #(do [% nil]) (keys id->nid)))
             rev-child-parent-fn (fn [instances] (into {} (mapcat (fn [inst] (map #(do [% (:id inst)]) (:children inst))) instances)))

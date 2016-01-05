@@ -20,7 +20,7 @@
 
 (namespaces/import-vars [plumbing.core defnk fnk])
 
-(namespaces/import-vars [internal.graph.types NodeID node-id->graph-id node->graph-id sources targets connected? dependencies Properties Node node-id node-type property-types produce-value NodeType supertypes interfaces protocols method-impls transforms transform-types internal-properties declared-properties public-properties externs declared-inputs injectable-inputs declared-outputs cached-outputs input-dependencies input-cardinality cascade-deletes substitute-for input-type output-type input-labels output-labels property-labels property-display-order])
+(namespaces/import-vars [internal.graph.types NodeID node-id->graph-id node->graph-id sources targets connected? dependencies Properties Node node-id property-types produce-value NodeType supertypes interfaces protocols method-impls transforms transform-types internal-properties declared-properties public-properties externs declared-inputs injectable-inputs declared-outputs cached-outputs input-dependencies input-cardinality cascade-deletes substitute-for input-type output-type input-labels output-labels property-labels property-display-order])
 
 (namespaces/import-vars [internal.graph.error-values INFO WARNING SEVERE FATAL error-info error-warning error-severe error-fatal error? error-info? error-warning? error-severe? error-fatal? most-serious error-aggregate worse-than])
 
@@ -73,6 +73,12 @@
    (node-type* (now) node-id))
   ([basis node-id]
    (gt/node-type (ig/node-by-id-at basis node-id) basis)))
+
+(defn node-type
+  ([node]
+    (node-type (now) node))
+  ([basis node]
+    (gt/node-type node basis)))
 
 (defn cache "The system cache of node values"
   []
@@ -306,7 +312,7 @@
              basis#          (is/basis @*the-system*)
              all-graphs#     (util/map-vals deref (is/graphs @*the-system*))
              to-be-replaced# (when (and all-graphs# replacing#)
-                               (filterv #(= replacing# (node-type % basis#)) (mapcat ig/node-values (vals all-graphs#))))
+                               (filterv #(= replacing# (node-type basis# %)) (mapcat ig/node-values (vals all-graphs#))))
              ctor#           (fn [args#] (~ctor-name (merge (in/defaults ~symb) args#)))]
          (def ~symb (in/make-node-type (assoc description# :dynamo.graph/ctor ctor#)))
          (in/declare-node-value-function-names '~symb ~symb)
@@ -844,7 +850,7 @@
         property-labels (keys (-> node (gt/property-types basis)))
         all-node-properties (reduce (fn [props label] (assoc props label (node-value node-id label :basis basis))) {} property-labels)
         properties-without-fns (util/filterm (comp not fn? val) all-node-properties)]
-    {:node-type  (gt/node-type node basis)
+    {:node-type  (node-type basis node)
      :properties properties-without-fns}))
 
 (def opts-schema {(optional-key :traverse?) Runnable
