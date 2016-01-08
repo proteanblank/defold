@@ -731,14 +731,24 @@
   ([basis outputs]
     (c/cache-invalidate (cache) (dependencies basis outputs))))
 
+(defn node-instance*?
+  "Returns true if the node is a member of a given type, including
+   supertypes."
+  ([type node]
+    (node-instance*? (now) type node))
+  ([basis type node]
+    (let [node-ty    (node-type basis node)
+          supertypes (supertypes node-ty)
+          all-types  (into #{node-ty} supertypes)]
+      (all-types type))))
+
 (defn node-instance?
   "Returns true if the node is a member of a given type, including
    supertypes."
-  [type node-id]
-  (let [node-ty    (node-type* node-id)
-        supertypes (supertypes node-ty)
-        all-types  (into #{node-ty} supertypes)]
-    (all-types type)))
+  ([type node-id]
+    (node-instance? (now) type node-id))
+  ([basis type node-id]
+    (node-instance*? basis type (ig/node-by-id-at basis node-id))))
 
 ;; ---------------------------------------------------------------------------
 ;; Support for property getters & setters
@@ -848,7 +858,7 @@
   [basis node]
   (let [node-id (gt/node-id node)
         property-labels (keys (-> node (gt/property-types basis)))
-        all-node-properties (reduce (fn [props label] (assoc props label (node-value node-id label :basis basis))) {} property-labels)
+        all-node-properties (reduce (fn [props label] (assoc props label (gt/get-property node basis label))) {} property-labels)
         properties-without-fns (util/filterm (comp not fn? val) all-node-properties)]
     {:node-type  (node-type basis node)
      :properties properties-without-fns}))

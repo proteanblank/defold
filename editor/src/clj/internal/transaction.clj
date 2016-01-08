@@ -234,7 +234,6 @@
                        (-> type gt/output-labels))]
       (-> ctx
         (disconnect-all-inputs node-id node)
-        (disconnect-all-outputs node-id node)
         (update :basis basis-delete-node node-id)
         (update-in [:nodes-affected node-id] set/union all-labels)
         (assoc-in [:nodes-deleted node-id] node)

@@ -618,7 +618,7 @@
 (defn collect-base-property-value
   [self-name ctx-name node-type-name node-type propmap-sym prop]
   (if (ip/default-getter? (gt/property-type node-type prop))
-    `(gt/produce-value ~self-name ~prop ~ctx-name)
+    `(gt/get-property ~self-name (:basis ~ctx-name) ~prop)
     (call-with-error-checked-fnky-arguments self-name ctx-name propmap-sym prop node-type-name node-type
                                             (ip/getter-for (gt/property-type node-type prop))
                                             `(get-in ~propmap-sym [~prop :internal.property/value]))))
@@ -1016,11 +1016,13 @@
        (node-id        [this#]    (:_node-id this#))
        (node-type      [_ _]        ~node-type-name)
        (property-types [_ _]     (gt/public-properties ~node-type-name))
+       (get-property   [~'this basis# property#]
+         (get ~'this property#))
        (set-property   [~'this basis# property# value#]
-         (let [type# (gt/node-type ~'this basis#)]
-           (assert (contains? (gt/property-labels type#) property#)
-                   (format "Attempting to use property %s from %s, but it does not exist" property# (:name type#))))
-         (assoc ~'this property# value#))
+       (let [type# (gt/node-type ~'this basis#)]
+         (assert (contains? (gt/property-labels type#) property#)
+                 (format "Attempting to use property %s from %s, but it does not exist" property# (:name type#))))
+       (assoc ~'this property# value#))
        (clear-property [~'this basis# property#]
          (throw (ex-info (str "Not possible to clear property " property# " of node type " (:name ~node-type-name) " since the node is not an override")
                          {:label property# :node-type ~node-type-name})))
@@ -1076,6 +1078,7 @@
   (node-id             [this] node-id)
   (node-type           [this basis] (gt/node-type (ig/node-by-id-at basis original-id) basis))
   (property-types      [this basis] (gt/public-properties (gt/node-type this basis)))
+  (get-property        [this basis property] (get properties property))
   (set-property        [this basis property value] (if (= :_output-jammers property)
                                                      (throw (ex-info "Not possible to mark override nodes as defective" {}))
                                                      (assoc-in this [:properties property] value)))

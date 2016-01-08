@@ -51,15 +51,17 @@
 (remove #{3} '(3))
 
 (defn remove-node
-  [g n original]
-  (-> g
-      (update :nodes dissoc n)
-      (cond->
-        original (update-in [:node->overrides original] (partial remove #{n})))
-      (update :sarcs dissoc n)
-      (update :sarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.target arc))) arcs)) %))
-      (update :tarcs dissoc n)
-      (update :tarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.source arc))) arcs)) %))))
+  ([g n]
+    (remove-node g n (some-> (get-in g [:nodes n]) gt/original)))
+  ([g n original]
+    (-> g
+        (update :nodes dissoc n)
+        (cond->
+          original (update-in [:node->overrides original] (partial remove #{n})))
+        (update :sarcs dissoc n)
+        (update :sarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.target arc))) arcs)) %))
+        (update :tarcs dissoc n)
+        (update :tarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.source arc))) arcs)) %)))))
 
 (defn transform-node
   [g n f & args]
@@ -74,10 +76,9 @@
     (update-in g [:sarcs source] conjv (arc source target source-label target-label))))
 
 (defn connect-target
-  [g target-type source source-label target target-label]
+  [g source source-label target target-label]
   (let [to (node g target)]
     (assert (not (nil? to)) (str "Attempt to connect " (pr-str source source-label target target-label)))
-    (assert (some #{target-label} (-> target-type gt/input-labels)) (str "No label " target-label " exists on node " to))
     (update-in g [:tarcs target] conjv (arc source target source-label target-label))))
 
 (defn source-connected?
@@ -360,17 +361,19 @@
           src-graph     (get graphs src-gid)
           tgt-gid       (gt/node-id->graph-id tgt-id)
           tgt-graph     (get graphs tgt-gid)
-          tgt-type      (gt/node-type (node tgt-graph tgt-id) this)]
+          tgt-node      (node tgt-graph tgt-id)
+          tgt-type      (gt/node-type tgt-node this)]
       (assert (<= (:_volatility src-graph 0) (:_volatility tgt-graph 0)))
       (assert-type-compatible this src-id src-label tgt-id tgt-label)
+      (assert (some #{tgt-label} (-> tgt-type gt/input-labels)) (str "No label " tgt-label " exists on node " tgt-node))
       (if (= src-gid tgt-gid)
         (update this :graphs assoc
                 src-gid (-> src-graph
-                            (connect-target tgt-type src-id src-label tgt-id tgt-label)
+                            (connect-target src-id src-label tgt-id tgt-label)
                             (connect-source src-id src-label tgt-id tgt-label)))
         (update this :graphs assoc
                 src-gid (connect-source src-graph src-id src-label tgt-id tgt-label)
-                tgt-gid (connect-target tgt-graph tgt-type src-id src-label tgt-id tgt-label)))))
+                tgt-gid (connect-target tgt-graph src-id src-label tgt-id tgt-label)))))
 
   (disconnect
     [this src-id src-label tgt-id tgt-label]

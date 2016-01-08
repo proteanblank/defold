@@ -57,6 +57,7 @@
   (node-id             [this]        "Return an ID that can be used to get this node (or a future value of it).")
   (node-type           [this basis]        "Return the node type that created this node.")
   (property-types      [this basis]        "Return the combined map of compile-time and runtime properties")
+  (get-property        [this basis property])
   (set-property        [this basis property value])
   (clear-property      [this basis property])
   (produce-value       [this output evaluation-context] "Return the value of the named output")
