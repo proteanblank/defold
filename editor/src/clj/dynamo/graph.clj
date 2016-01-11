@@ -75,6 +75,7 @@
    (gt/node-type (ig/node-by-id-at basis node-id) basis)))
 
 (defn node-type
+  "Return the node-type given a node. Uses the current basis if not provided."
   ([node]
     (node-type (now) node))
   ([basis node]
