@@ -48,8 +48,6 @@
 (defn node        [g id]   (get-in g [:nodes id]))
 (defn add-node    [g id n] (assoc-in g [:nodes id] n))
 
-(remove #{3} '(3))
-
 (defn remove-node
   ([g n]
     (remove-node g n (some-> (get-in g [:nodes n]) gt/original)))
