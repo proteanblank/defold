@@ -965,6 +965,8 @@
   (in/make-override-node override-id (is/next-node-id @*the-system* graph-id) original-node-id {}))
 
 (defn override
+  ([root-id]
+    (override root-id {}))
   ([root-id opts]
     (override (now) root-id opts))
   ([basis root-id {:keys [traverse?] :or {traverse? (constantly true)}}]

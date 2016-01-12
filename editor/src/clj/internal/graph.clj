@@ -48,14 +48,23 @@
 (defn node        [g id]   (get-in g [:nodes id]))
 (defn add-node    [g id n] (assoc-in g [:nodes id] n))
 
+(defn remove-override-node [g n original]
+  (if original
+    (let [override-id (gt/override-id (get-in g [:nodes n]))
+          override (get-in g [:overrides override-id])]
+      (cond-> g
+        true (update-in [:node->overrides original] (partial remove #{n}))
+        (= original (:root-id override)) (update :overrides dissoc override-id)))
+    g))
+
 (defn remove-node
   ([g n]
     (remove-node g n (some-> (get-in g [:nodes n]) gt/original)))
   ([g n original]
     (-> g
+        (remove-override-node n original)
         (update :nodes dissoc n)
-        (cond->
-          original (update-in [:node->overrides original] (partial remove #{n})))
+        (update :node->overrides dissoc n)
         (update :sarcs dissoc n)
         (update :sarcs #(map-vals (fn [arcs] (removev (fn [^ArcBase arc] (= n (.target arc))) arcs)) %))
         (update :tarcs dissoc n)

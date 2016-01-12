@@ -2,9 +2,11 @@
   (:require [clojure.test :refer :all]
             [dynamo.graph :as g]
             [internal.graph :as ig]
+            [internal.system :as is]
             [internal.graph.generator :as ggen]
             [internal.graph.types :as gt]
-            [schema.core :as s]))
+            [schema.core :as s]
+            [support.test-support :refer [with-clean-system tx-nodes]]))
 
 (defn occurrences [coll]
   (vals (frequencies coll)))
@@ -92,3 +94,17 @@
     String    [g/Any]      false
     [String]  g/Any        true
     [String]  [g/Any]      true))
+
+(g/defnode TestNode
+  (property val g/Str))
+
+(deftest graph-override-cleanup
+  (with-clean-system
+    (let [[original override] (tx-nodes (g/make-nodes world [n (TestNode :val "original")]
+                                                      (:tx-data (g/override n))))
+          basis (is/basis system)]
+      (is (= override (first (ig/overrides basis original))))
+      (g/transact (g/delete-node original))
+      (let [basis (is/basis system)]
+        (is (empty? (ig/overrides basis original)))
+        (is (empty? (get-in basis [:graphs world :overrides])))))))
