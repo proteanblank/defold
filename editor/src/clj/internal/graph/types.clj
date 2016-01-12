@@ -103,7 +103,6 @@
                                          (s/optional-key :validation-problems) s/Any
                                          :value                                (s/either s/Any ErrorValue)
                                          :type                                 (s/protocol PropertyType)
-                                         (s/optional-key :path)                [s/Keyword]
                                          s/Keyword                             s/Any}}
                  (s/optional-key :display-order) [(s/either s/Keyword [(s/one String "category") s/Keyword])]})
 

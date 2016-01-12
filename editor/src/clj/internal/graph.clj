@@ -344,7 +344,7 @@
     [this original-node-id override-node-id]
     (let [gid      (gt/node-id->graph-id override-node-id)]
       (update-in this [:graphs gid :node->overrides original-node-id] conj override-node-id)))
-  
+
   (add-override
     [this override-id override]
     (let [gid (gt/override-id->graph-id override-id)]
@@ -354,7 +354,7 @@
     [this override-id]
     (let [gid (gt/override-id->graph-id override-id)]
       (update-in this [:graphs gid :overrides] dissoc override-id)))
-  
+
   (connect
     [this src-id src-label tgt-id tgt-label]
     (let [src-gid       (gt/node-id->graph-id src-id)
@@ -398,7 +398,7 @@
   (dependencies
     [this to-be-marked]
     (pre-traverse this (stackify to-be-marked) successors))
-  
+
   (original-node [this node-id]
     (when-let [node (node-by-id-at this node-id)]
       (gt/original node))))

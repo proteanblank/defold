@@ -1019,10 +1019,10 @@
        (get-property   [~'this basis# property#]
          (get ~'this property#))
        (set-property   [~'this basis# property# value#]
-       (let [type# (gt/node-type ~'this basis#)]
-         (assert (contains? (gt/property-labels type#) property#)
-                 (format "Attempting to use property %s from %s, but it does not exist" property# (:name type#))))
-       (assoc ~'this property# value#))
+         (let [type# (gt/node-type ~'this basis#)]
+           (assert (contains? (gt/property-labels type#) property#)
+                   (format "Attempting to use property %s from %s, but it does not exist" property# (:name type#))))
+         (assoc ~'this property# value#))
        (clear-property [~'this basis# property#]
          (throw (ex-info (str "Not possible to clear property " property# " of node type " (:name ~node-type-name) " since the node is not an override")
                          {:label property# :node-type ~node-type-name})))

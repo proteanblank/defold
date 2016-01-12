@@ -329,7 +329,7 @@
             ctx)))
       ctx)))
 
-(defn- weird-workaround [ctx node-id node property]
+(defn- ctx-set-property-to-nil [ctx node-id node property]
   (let [basis (:basis ctx)
         old-value (node-value basis node property)]
     (if-let [setter-fn (in/setter-for basis node property)]
@@ -344,7 +344,7 @@
           (mark-activated node-id property)
           (update :basis replace-node node-id (gt/clear-property node basis property))
           (update-in [:properties-modified node-id] conj property)
-          (weird-workaround node-id node property)))
+          (ctx-set-property-to-nil node-id node property)))
       ctx)))
 
 (defn- ctx-disconnect-single [ctx target target-id target-label]
