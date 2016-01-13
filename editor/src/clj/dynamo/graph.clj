@@ -717,14 +717,24 @@
   ([basis outputs]
     (c/cache-invalidate (cache) (dependencies basis outputs))))
 
+(defn node-instance*?
+  "Returns true if the node is a member of a given type, including
+   supertypes."
+  ([type node]
+    (node-instance*? (now) type node))
+  ([basis type node]
+    (let [node-ty  (gt/node-type node)
+          supertypes (supertypes node-ty)
+          all-types  (into #{node-ty} supertypes)]
+      (all-types type))))
+
 (defn node-instance?
   "Returns true if the node is a member of a given type, including
    supertypes."
-  [type node-id]
-  (let [node-ty    (node-type* node-id)
-        supertypes (supertypes node-ty)
-        all-types  (into #{node-ty} supertypes)]
-    (all-types type)))
+  ([type node-id]
+    (node-instance? (now) type node-id))
+  ([basis type node-id]
+    (node-instance*? basis type (ig/node-by-id-at basis node-id))))
 
 ;; ---------------------------------------------------------------------------
 ;; Support for property getters & setters

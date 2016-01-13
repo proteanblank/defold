@@ -482,7 +482,7 @@
 
 (defn- active-scene-view [app-view]
   (let [view (g/node-value app-view :active-view)]
-    (when (and view (= (g/node-type* view) SceneView))
+    (when (and view (g/node-instance? SceneView view))
       view)))
 
 (defn- play-handler [view-id]

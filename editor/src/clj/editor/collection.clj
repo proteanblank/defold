@@ -365,11 +365,11 @@
   (= 1 (count selection)))
 
 (defn- selected-collection? [selection]
-  (= CollectionNode (g/node-type* (first selection))))
+  (g/node-instance? CollectionNode (first selection)))
 
 (defn- selected-embedded-instance? [selection]
   (let [node (first selection)]
-    (and (= GameObjectInstanceNode (g/node-type* node))
+    (and (g/node-instance? GameObjectInstanceNode node)
          (g/node-value node :embedded))))
 
 (defn- add-game-object-file [selection]
@@ -516,7 +516,7 @@
                                    (:position embedded)
                                    (v4->euler (:rotation embedded))
                                    [scale scale scale] false false))))
-            new-instance-data (filter #(and (= :create-node (:type %)) (= GameObjectInstanceNode (g/node-type (:node %)))) tx-go-creation)
+            new-instance-data (filter #(and (= :create-node (:type %)) (g/node-instance*? GameObjectInstanceNode (:node %))) tx-go-creation)
             id->nid (into {} (map #(do [(get-in % [:node :id]) (g/node-id (:node %))]) new-instance-data))
             child->parent (into {} (map #(do [% nil]) (keys id->nid)))
             rev-child-parent-fn (fn [instances] (into {} (mapcat (fn [inst] (map #(do [% (:id inst)]) (:children inst))) instances)))

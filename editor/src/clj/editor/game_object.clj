@@ -270,7 +270,7 @@
             (project/select project [comp-node])))))))
 
 (handler/defhandler :add-from-file :global
-  (active? [selection] (and (= 1 (count selection)) (= GameObjectNode (g/node-type (g/node-by-id (first selection))))))
+  (active? [selection] (and (= 1 (count selection)) (g/node-instance? GameObjectNode (first selection))))
   (label [] "Add Component File")
   (run [selection] (add-component-handler (first selection))))
 
@@ -345,7 +345,7 @@
 
 (handler/defhandler :add :global
   (label [user-data] (add-embedded-component-label user-data))
-  (active? [selection] (and (= 1 (count selection)) (= GameObjectNode (g/node-type (g/node-by-id (first selection))))))
+  (active? [selection] (and (= 1 (count selection)) (g/node-instance? GameObjectNode (first selection))))
   (run [user-data] (add-embedded-component-handler user-data))
   (options [selection user-data]
            (let [self (first selection)

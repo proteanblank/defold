@@ -638,7 +638,7 @@
     node-id
     (when (contains? (g/declared-inputs node-type) :source-id)
       (let [source-id (g/node-value node-id :source-id)]
-        (when (= ParticleFXNode (g/node-type (g/node-by-id source-id)))
+        (when (g/node-instance? ParticleFXNode source-id)
           source-id)))))
 
 (defn- v4->euler [v]
