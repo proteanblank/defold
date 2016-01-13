@@ -18,7 +18,7 @@
             [editor.ui :as ui]
             [editor.handler :as handler]
             [editor.workspace :as workspace]
-            [internal.render.pass :as pass]
+            [editor.gl.pass :as pass]
             [editor.ui :as ui]
             [service.log :as log])
   (:import [com.defold.editor Start UIUtil]

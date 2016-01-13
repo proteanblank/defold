@@ -15,7 +15,7 @@
             [editor.scene-tools :as scene-tools]
             [editor.types :as types]
             [editor.workspace :as workspace]
-            [internal.render.pass :as pass]
+            [editor.gl.pass :as pass]
             [service.log :as log]
             [editor.scene :as scene])
   (:import [com.defold.editor Start UIUtil]

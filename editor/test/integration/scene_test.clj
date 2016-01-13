@@ -10,7 +10,7 @@
             [editor.sprite :as sprite]
             [editor.switcher :as switcher]
             [integration.test-util :as test-util]
-            [internal.render.pass :as pass])
+            [editor.gl.pass :as pass])
   (:import [javax.vecmath Point3d]))
 
 (defn- make-aabb [min max]
