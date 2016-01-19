@@ -1,7 +1,6 @@
 (ns editor.scene
   (:require [clojure.set :as set]
             [dynamo.graph :as g]
-            [dynamo.util :as util]
             [editor.background :as background]
             [editor.camera :as c]
             [editor.colors :as colors]

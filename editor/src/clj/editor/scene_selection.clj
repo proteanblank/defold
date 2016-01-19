@@ -1,7 +1,7 @@
 (ns editor.scene-selection
   (:require [clojure.set :as set]
             [dynamo.graph :as g]
-            [dynamo.util :as util]
+            [editor.system :as system]
             [editor.background :as background]
             [editor.colors :as colors]
             [editor.camera :as c]
@@ -89,7 +89,7 @@
 
 (def mac-toggle-modifiers #{:shift :meta})
 (def other-toggle-modifiers #{:control})
-(def toggle-modifiers (if util/mac? mac-toggle-modifiers other-toggle-modifiers))
+(def toggle-modifiers (if system/mac? mac-toggle-modifiers other-toggle-modifiers))
 
 (defn handle-selection-input [self action user-data]
   (let [start      (g/node-value self :start)
