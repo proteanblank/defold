@@ -1,5 +1,5 @@
 (ns editor.cubemap
-  (:require [dynamo.file.protobuf :as protobuf]
+  (:require [editor.protobuf :as protobuf]
             [dynamo.graph :as g]
             [editor.geom :as geom]
             [editor.gl :as gl]
@@ -74,16 +74,14 @@
   (apply texture/image-cubemap-texture _node-id [right-img left-img top-img bottom-img front-img back-img]))
 
 (g/defnk produce-save-data [resource right left top bottom front back]
-  {:resource resource
-   :content (-> (doto (Graphics$Cubemap/newBuilder)
-                  (.setRight right)
-                  (.setLeft left)
-                  (.setTop top)
-                  (.setBottom bottom)
-                  (.setFront front)
-                  (.setBack back))
-              (.build)
-              (protobuf/pb->str))})
+  (let [proto-msg {:right right
+                   :left left
+                   :top top
+                   :bottom bottom
+                   :front front
+                   :back back}]
+    {:resource resource
+     :content (protobuf/map->str Graphics$Cubemap proto-msg)}))
 
 (g/defnk produce-scene
   [_node-id aabb gpu-texture vertex-binding]
@@ -119,7 +117,7 @@
   (output scene       g/Any :cached produce-scene))
 
 (defn load-cubemap [project self resource]
-  (let [cubemap-message (protobuf/pb->map (protobuf/read-text Graphics$Cubemap resource))]
+  (let [cubemap-message (protobuf/read-text Graphics$Cubemap resource)]
     (for [[side input] cubemap-message
           :let [img-resource (workspace/resolve-resource resource input)]]
       (concat
