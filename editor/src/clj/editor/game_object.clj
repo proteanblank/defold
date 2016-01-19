@@ -230,11 +230,6 @@
   (output build-targets g/Any :cached produce-build-targets)
   (output scene g/Any :cached produce-scene))
 
-(defn- connect-if-output [out-node out-label in-node in-label]
-  (if ((-> out-node g/node-type g/output-labels) out-label)
-    (g/connect (g/node-id out-node) out-label (g/node-id in-node) in-label)
-    []))
-
 (defn- gen-component-id [go-node base]
   (let [ids (g/node-value go-node :child-ids)]
     (loop [postfix 0]

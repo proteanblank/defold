@@ -202,10 +202,10 @@
         (g/connect node3 :produces-value node2 :consumes-value)
         (g/connect node4 :produces-value node3 :discards-value)])
       [node3 (g/copy [node1] {:traverse? (comp stop-at-stoppers)
-                              :serializer (fn [node]
+                              :serializer (fn [basis node]
                                             (if (g/node-instance? StopperNode (g/node-id node))
                                               (serialize-stopper node)
-                                              (g/default-node-serializer node)))})]))
+                                              (g/default-node-serializer basis node)))})]))
 
 (deftest serialization-uses-predicates
   (ts/with-clean-system
