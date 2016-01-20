@@ -98,24 +98,29 @@
   (let [nodes (into {} (map #(let [n (:node %)] [(:_node-id n) n]) (filter #(= (:type %) :create-node) (:tx-data paste-data))))]
     (mapv (partial get nodes) (:root-node-ids paste-data))))
 
-(defn- build-tx-data [item reqs paste-data]
+(defn- build-tx-attach-data [item reqs paste-data]
   (let [target (:node-id item)]
-    (concat
-      (:tx-data paste-data)
-      (for [[node req] (map vector (:root-node-ids paste-data) reqs)]
-        (if-let [tx-attach-fn (:tx-attach-fn req)]
-          (tx-attach-fn target node)
-          [])))))
+    (for [[node req] (map vector (:root-node-ids paste-data) reqs)]
+      (if-let [tx-attach-fn (:tx-attach-fn req)]
+        (tx-attach-fn target node)
+        []))))
 
 (defn paste! [graph item-iterator data select-fn]
   (let [paste-data (paste graph data)
         root-nodes (root-nodes paste-data)]
     (when-let [[item reqs] (find-target-item item-iterator root-nodes)]
-      (g/transact
-        (concat
-          (g/operation-label "Paste")
-          (build-tx-data item reqs paste-data)
-          (select-fn (mapv :_node-id root-nodes)))))))
+      (let [op-seq (gensym)]
+        (g/transact
+          (concat
+            (g/operation-label "Paste")
+            (g/operation-sequence op-seq)
+            (:tx-data paste-data)))
+        (g/transact
+          (concat
+            (g/operation-label "Paste")
+            (g/operation-sequence op-seq)
+            (build-tx-attach-data item reqs paste-data)
+            (select-fn (mapv :_node-id root-nodes))))))))
 
 (defn paste? [graph item-iterator data]
   (try
@@ -164,12 +169,13 @@
               (g/operation-label "Drop")
               (g/operation-sequence op-seq)
               (for [it src-item-iterators]
-                (g/delete-node (:node-id (value it))))))
+                (g/delete-node (:node-id (value it))))
+              (:tx-data paste-data)))
           (g/transact
             (concat
               (g/operation-label "Drop")
               (g/operation-sequence op-seq)
-              (build-tx-data item reqs paste-data)
+              (build-tx-attach-data item reqs paste-data)
               (select-fn (mapv :_node-id root-nodes)))))))))
 
 (defn resolve-id [id ids]

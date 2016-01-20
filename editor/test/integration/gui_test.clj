@@ -112,6 +112,17 @@
          text-node (get nodes "hexagon_text")]
      (is (= false (g/node-value text-node :line-break))))))
 
+(deftest gui-text-node-copy-paste
+  (with-clean-system
+   (let [workspace (test-util/setup-workspace! world)
+         project   (test-util/setup-project! workspace)
+         node-id   (test-util/resource-node project "/logic/main.gui")]
+     (test-util/copy-paste! project node-id [0 4])
+     (let [new-text-props (g/node-value (:node-id (test-util/outline node-id [0 5])) :_properties)
+           font-opts (get-in new-text-props [:properties :font :edit-type :options])]
+       (is (> (count font-opts) 0))
+       (is (not= nil (get-in new-text-props [:properties :font :value])))))))
+
 (defn- render-order [renderer]
   (let [renderables (g/node-value renderer :renderables)]
     (->> (get renderables pass/transparent)

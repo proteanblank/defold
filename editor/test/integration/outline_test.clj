@@ -18,66 +18,42 @@
 
 (defn- outline
   ([node]
-    (outline node []))
+    (test-util/outline node))
   ([node path]
-    (loop [outline (g/node-value node :node-outline)
-           path path]
-      (if-let [segment (first path)]
-        (recur (get (vec (:children outline)) segment) (rest path))
-        outline))))
-
-(def ^:private ^:dynamic *clipboard* nil)
-(def ^:private ^:dynamic *dragboard* nil)
-(def ^:private ^:dynamic *drag-source-iterators* nil)
-
-(defrecord TestItemIterator [root-node path]
-  outline/ItemIterator
-  (value [this] (outline root-node path))
-  (parent [this] (when (not (empty? path))
-                   (TestItemIterator. root-node (butlast path)))))
-
-(defn- ->iterator [root-node path]
-  (TestItemIterator. root-node path))
+    (test-util/outline node path)))
 
 (defn- copy! [node path]
-  (let [data (outline/copy [(->iterator node path)])]
-    (alter-var-root #'*clipboard* (constantly data))))
+  (test-util/copy! node path))
 
 (defn- cut? [node path]
-  (outline/cut? [(->iterator node path)]))
+  (test-util/cut? node path))
 
 (defn- cut! [node path]
-  (let [data (outline/cut! [(->iterator node path)])]
-    (alter-var-root #'*clipboard* (constantly data))))
+  (test-util/cut! node path))
 
 (defn- paste!
   ([project node]
-    (paste! project node []))
+    (test-util/paste! project node))
   ([project node path]
-    (let [it (->iterator node path)]
-      (outline/paste! (project/graph project) it *clipboard* (partial project/select project)))))
+    (test-util/paste! project node path)))
 
 (defn- copy-paste! [project node path]
-  (copy! node path)
-  (paste! project node (butlast path)))
+  (test-util/copy-paste! project node path))
 
 (defn- drag! [node path]
-  (let [src-item-iterators [(->iterator node path)]
-        data (outline/copy src-item-iterators)]
-    (alter-var-root #'*dragboard* (constantly data))
-    (alter-var-root #'*drag-source-iterators* (constantly src-item-iterators))))
+  (test-util/drag! node path))
 
 (defn- drop!
   ([project node]
-    (drop! project node []))
+    (test-util/drop! project node))
   ([project node path]
-    (outline/drop! (project/graph project) *drag-source-iterators* (->iterator node path) *dragboard* (partial project/select project))))
+    (test-util/drop! project node path)))
 
 (defn- drop?
   ([project node]
-    (drop? project node []))
+    (test-util/drop? project node))
   ([project node path]
-    (outline/drop? (project/graph project) *drag-source-iterators* (->iterator node path) *dragboard*)))
+    (test-util/drop? project node path)))
 
 (defn- child-count
   ([node]

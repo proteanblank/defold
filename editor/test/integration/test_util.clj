@@ -25,7 +25,8 @@
             [editor.gui :as gui]
             [editor.json :as json]
             [editor.mesh :as mesh]
-            [editor.material :as material])
+            [editor.material :as material]
+            [editor.outline :as outline])
   (:import [java.io File]
            [java.nio.file Files attribute.FileAttribute]
            [javax.imageio ImageIO]
@@ -150,3 +151,68 @@
   (let [image (g/node-value view :frame)]
     (let [file (File. path)]
       (ImageIO/write image "png" file))))
+
+;; Copy-paste, DND
+
+(def ^:private ^:dynamic *clipboard* nil)
+(def ^:private ^:dynamic *dragboard* nil)
+(def ^:private ^:dynamic *drag-source-iterators* nil)
+
+(defn outline
+  ([node]
+    (outline node []))
+  ([node path]
+    (loop [outline (g/node-value node :node-outline)
+           path path]
+      (if-let [segment (first path)]
+        (recur (get (vec (:children outline)) segment) (rest path))
+        outline))))
+
+(defrecord TestItemIterator [root-node path]
+  outline/ItemIterator
+  (value [this] (outline root-node path))
+  (parent [this] (when (not (empty? path))
+                   (TestItemIterator. root-node (butlast path)))))
+
+(defn- ->iterator [root-node path]
+  (TestItemIterator. root-node path))
+
+(defn copy! [node path]
+  (let [data (outline/copy [(->iterator node path)])]
+    (alter-var-root #'*clipboard* (constantly data))))
+
+(defn cut? [node path]
+  (outline/cut? [(->iterator node path)]))
+
+(defn cut! [node path]
+  (let [data (outline/cut! [(->iterator node path)])]
+    (alter-var-root #'*clipboard* (constantly data))))
+
+(defn paste!
+  ([project node]
+    (paste! project node []))
+  ([project node path]
+    (let [it (->iterator node path)]
+      (outline/paste! (project/graph project) it *clipboard* (partial project/select project)))))
+
+(defn copy-paste! [project node path]
+  (copy! node path)
+  (paste! project node (butlast path)))
+
+(defn drag! [node path]
+  (let [src-item-iterators [(->iterator node path)]
+        data (outline/copy src-item-iterators)]
+    (alter-var-root #'*dragboard* (constantly data))
+    (alter-var-root #'*drag-source-iterators* (constantly src-item-iterators))))
+
+(defn drop!
+  ([project node]
+    (drop! project node []))
+  ([project node path]
+    (outline/drop! (project/graph project) *drag-source-iterators* (->iterator node path) *dragboard* (partial project/select project))))
+
+(defn drop?
+  ([project node]
+    (drop? project node []))
+  ([project node path]
+    (outline/drop? (project/graph project) *drag-source-iterators* (->iterator node path) *dragboard*)))
