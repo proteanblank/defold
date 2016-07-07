@@ -272,7 +272,7 @@
   (when *tx-debug*
     (println (txerrstr ctx "deleting " node-id)))
   (let [basis (:basis ctx)
-        overrides-deep (comp reverse (partial tree-seq (constantly true) (partial ig/overrides basis)))
+        overrides-deep (comp reverse (partial tree-seq (constantly true) (partial ig/get-overrides basis)))
         to-delete    (->> (ig/pre-traverse basis [node-id] cascade-delete-sources)
                           (mapcat overrides-deep))]
     (when (and *tx-debug* (not (empty? to-delete)))
@@ -303,6 +303,8 @@
                                            succ changes))))
 
 (defn- ctx-override-node [ctx original-id override-id]
+  (assert (= (gt/node-id->graph-id original-id) (gt/node-id->graph-id override-id))
+            "Override nodes must belong to the same graph as the original")
   (let [basis (:basis ctx)
         original (gt/node-by-id-at basis original-id)
         all-originals (take-while some? (iterate (fn [nid] (some->> (gt/node-by-id-at basis nid)
@@ -330,7 +332,7 @@
 
 (defn- populate-overrides [ctx node-id]
   (let [basis (:basis ctx)
-        override-nodes (ig/overrides basis node-id)
+        override-nodes (ig/get-overrides basis node-id)
         overrides (map #(->> %
                           (gt/node-by-id-at basis)
                           gt/override-id)
@@ -347,7 +349,7 @@
 (defmethod perform :transfer-overrides
   [ctx {:keys [from-node-id to-node-id id-fn]}]
   (let [basis (:basis ctx)
-        override-nodes (ig/overrides basis from-node-id)
+        override-nodes (ig/get-overrides basis from-node-id)
         retained (set override-nodes)
         override-ids (into {} (map #(let [n (gt/node-by-id-at basis %)] [% (gt/override-id n)]) override-nodes))
         overrides (into {} (map (fn [[_ oid]] [oid (ig/override-by-id basis oid)]) override-ids))
@@ -495,8 +497,8 @@
     (if (contains? (in/cascade-deletes (gt/node-type target basis)) target-label)
       (let [source-id (gt/node-id source)
             target-id (gt/node-id target)
-            src-or-nodes (map (partial gt/node-by-id-at basis) (ig/overrides basis source-id))]
-        (loop [tgt-overrides (ig/overrides basis target-id)
+            src-or-nodes (map (partial gt/node-by-id-at basis) (ig/get-overrides basis source-id))]
+        (loop [tgt-overrides (ig/get-overrides basis target-id)
                ctx ctx]
           (if-let [or (first tgt-overrides)]
             (let [basis (:basis ctx)

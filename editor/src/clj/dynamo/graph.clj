@@ -1036,7 +1036,7 @@
   ([root-id]
     (overrides (now) root-id))
   ([basis root-id]
-    (ig/overrides basis root-id)))
+    (ig/get-overrides basis root-id)))
 
 (defn override-original
   ([node-id]
