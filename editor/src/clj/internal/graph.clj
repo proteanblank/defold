@@ -264,30 +264,27 @@
       arcs)))
 
 (defn- basis-arcs-by-head
-  ([basis node-id label]
-    (basis-arcs-by-head basis node-id label true))
-  ([basis node-id label implicit-targets?]
-    (let [graph (node-id->graph basis node-id)
-          arcs (explicit-arcs-by-source graph node-id label)]
+  [basis graph node-id label override-filter-fn]
+    (let [arcs (explicit-arcs-by-source graph node-id label)]
       (if-let [original (and (empty? arcs) (gt/original-node basis node-id))]
         (let [node (gt/node-by-id-at basis node-id)
               or-id (gt/override-id node)
-              arcs (->> (basis-arcs-by-head basis original label false)
-                     (map (fn [arc]
-                            (let [tgt-id (:target arc)
-                                  tgt-graph (node-id->graph basis tgt-id)]
-                              (assoc arc
-                                     :source node-id
-                                     :target (override-of tgt-graph tgt-id or-id)))))
-                     (filterv (comp some? :target)))]
+              arcs (loop [arcs (basis-arcs-by-head basis graph original label nil)
+                          res []]
+                     (if-let [arc (first arcs)]
+                       (let [tgt-id (:target arc)
+                             tgt-graph (node-id->graph basis tgt-id)]
+                         (if-let [new-target (override-of tgt-graph tgt-id or-id)]
+                           (let [new-arc (assoc arc
+                                                :source node-id
+                                                :target new-target)]
+                             (recur (rest arcs) (conj res new-arc)))
+                           (recur (rest arcs) res)))
+                       res))]
           arcs)
-        (if implicit-targets?
-          (let [override-filter-fn (->> (tree-seq (constantly true) (partial overrides graph) node-id)
-                                     (map #(gt/override-id (graph->node graph %)))
-                                     (into #{})
-                                     complement)]
-            (into arcs (implicit-target-arcs basis arcs override-filter-fn)))
-          arcs)))))
+        (if override-filter-fn
+          (into arcs (implicit-target-arcs basis arcs override-filter-fn))
+          arcs))))
 
 (defrecord MultigraphBasis [graphs]
   gt/IBasis
@@ -355,7 +352,12 @@
 
   (arcs-by-head
     [this node-id label]
-    (basis-arcs-by-head this node-id label))
+    (let [graph (node-id->graph this node-id)
+          override-filter-fn (->> (tree-seq (constantly true) (partial overrides graph) node-id)
+                               (map #(gt/override-id (graph->node graph %)))
+                               (into #{})
+                               complement)]
+      (basis-arcs-by-head this graph node-id label override-filter-fn)))
 
   (sources
     [this node-id]
@@ -498,21 +500,35 @@
   (let [gid (gt/node-id->graph-id node-id)
         graph (get (:graphs basis) gid)
         deps-by-label (input-deps basis node-id)
-        overrides (overrides graph node-id)]
+        override-filter-fn (->> (tree-seq (constantly true) (partial overrides graph) node-id)
+                             (map #(gt/override-id (graph->node graph %)))
+                             (into #{})
+                             complement)
+        overrides (overrides graph node-id)
+        node (gt/node-by-id-at basis node-id)
+        labels (or labels (-> node (gt/node-type basis) in/output-labels))]
     (loop [succ succ
            labels labels]
       (if-let [label (first labels)]
-        (let [deps []
+        (let [deps (transient #{})
               dep-labels (get deps-by-label label)
-              deps (reduce conj deps (map (partial vector node-id) dep-labels))
-              deps (reduce conj deps (for [label dep-labels
-	                                          override overrides]
-	                                      [override label]))
-              deps (reduce conj deps (->> (gt/targets basis node-id label)
-                                       (mapcat (fn [[id label]]
-                                                 (map vector (repeat id) (get (input-deps basis id) label))))
-                                       set))]
-          (recur (assoc succ [node-id label] deps) (rest labels)))
+              deps (reduce conj! deps (map (partial vector node-id) dep-labels))
+              deps (reduce conj! deps (for [label dep-labels
+	                                           override overrides]
+	                                       [override label]))
+              deps (loop [arcs (basis-arcs-by-head basis graph node-id label override-filter-fn)
+                          res deps]
+                     (if-let [^ArcBase arc (first arcs)]
+                       (let [tgt-id (.target arc)
+                             tgt-label (.targetLabel arc)
+                             res (loop [labels (get (input-deps basis tgt-id) tgt-label)
+                                        res res]
+                                   (if-let [label (first labels)]
+                                     (recur (rest labels) (conj! res [tgt-id label]))
+                                     res))]
+                         (recur (rest arcs) res))
+                       res))]
+          (recur (assoc succ [node-id label] (persistent! deps)) (rest labels)))
         succ))))
 
 (defn update-successors
@@ -526,9 +542,8 @@
         succ-map (loop [succ-map succ-map
                         changes changes]
                    (if-let [[node-id labels] (first changes)]
-                     (if-let [node (gt/node-by-id-at basis node-id)]
-                       (let [labels (or labels (-> node (gt/node-type basis) in/output-labels))
-                             gid (gt/node-id->graph-id node-id)
+                     (if (gt/node-by-id-at basis node-id)
+                       (let [gid (gt/node-id->graph-id node-id)
                              succ-map (update succ-map gid succ-output-successors basis node-id labels)]
                          (recur succ-map (rest changes)))
                        (recur succ-map (rest changes)))
