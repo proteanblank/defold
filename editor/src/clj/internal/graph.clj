@@ -233,11 +233,17 @@
       (get tgt-label))))
 
 (defn- implicit-overrides [basis node-id label arc-fn override-filter-fn]
-  (let [graph (get (:graphs basis) (gt/node-id->graph-id node-id))
-        overrides (filterv #(and (override-filter-fn (gt/override-id (gt/node-by-id-at basis %)))
-                                (empty? (arc-fn graph % label)))
-                           (overrides graph node-id))]
-    (mapcat #(cons % (implicit-overrides basis % label arc-fn override-filter-fn)) overrides)))
+  (let [graph (get (:graphs basis) (gt/node-id->graph-id node-id))]
+    (loop [overrides (overrides graph node-id)
+           res []]
+      (if-let [override (first overrides)]
+        (if (and (override-filter-fn (gt/override-id (gt/node-by-id-at basis override)))
+                 (empty? (arc-fn graph override label)))
+          (let [res (conj res override)
+                res (reduce conj res (implicit-overrides basis override label arc-fn override-filter-fn))]
+            res)
+          (recur (rest overrides) res))
+        res))))
 
 (defn- implicit-target-arcs [basis arcs override-filter-fn]
   (loop [arcs arcs
@@ -264,12 +270,11 @@
       arcs)))
 
 (defn- basis-arcs-by-head
-  [basis graph node-id label override-filter-fn]
+  [basis graph node-id node label override-filter-fn]
     (let [arcs (explicit-arcs-by-source graph node-id label)]
       (if-let [original (and (empty? arcs) (gt/original-node basis node-id))]
-        (let [node (gt/node-by-id-at basis node-id)
-              or-id (gt/override-id node)
-              arcs (loop [arcs (basis-arcs-by-head basis graph original label nil)
+        (let [or-id (gt/override-id node)
+              arcs (loop [arcs (basis-arcs-by-head basis graph original (graph->node graph original) label nil)
                           res []]
                      (if-let [arc (first arcs)]
                        (let [tgt-id (:target arc)
@@ -329,26 +334,30 @@
 
   (arcs-by-head
     [this node-id]
-    (let [graph (node-id->graph this node-id)
+    (let [arcs (transient [])
+          graph (node-id->graph this node-id)
           explicit (explicit-arcs-by-source graph node-id)
+          arcs (reduce conj! arcs explicit)
           override-filter-fn (->> (tree-seq (constantly true) (partial overrides graph) node-id)
                                      (map #(gt/override-id (graph->node graph %)))
                                      (into #{})
                                      complement)
           implicit-targets (implicit-target-arcs this explicit override-filter-fn)
+          arcs (reduce conj! arcs implicit-targets)
           node (gt/node-by-id-at this node-id)
-          implicit (when-let [override-ids (and node #{(gt/override-id node)})]
-                     (loop [original (gt/original node)
-                            arcs (transient [])]
-                       (if original
-                         (let [explicit (explicit-arcs-by-source graph original)
-                               implicit (mapcat (fn [^ArcBase a]
-                                                  (map (fn [nid] (assoc a :target nid))
-                                                       (implicit-overrides this (.target a) (.targetLabel a) explicit-arcs-by-target override-ids)))
-                                            explicit)]
-                           (recur (gt/original (gt/node-by-id-at this original)) (reduce conj! arcs implicit)))
-                         (persistent! arcs))))]
-      (concat explicit implicit-targets implicit)))
+          arcs (if-let [override-ids (and node #{(gt/override-id node)})]
+                 (loop [original (gt/original node)
+                        arcs arcs]
+                   (if original
+                     (let [explicit (explicit-arcs-by-source graph original)
+                           implicit (mapcat (fn [^ArcBase a]
+                                              (map (fn [nid] (assoc a :target nid))
+                                                   (implicit-overrides this (.target a) (.targetLabel a) explicit-arcs-by-target override-ids)))
+                                        explicit)]
+                       (recur (gt/original (gt/node-by-id-at this original)) (reduce conj! arcs implicit)))
+                     arcs))
+                 arcs)]
+      (persistent! arcs)))
 
   (arcs-by-head
     [this node-id label]
@@ -357,7 +366,7 @@
                                (map #(gt/override-id (graph->node graph %)))
                                (into #{})
                                complement)]
-      (basis-arcs-by-head this graph node-id label override-filter-fn)))
+      (basis-arcs-by-head this graph node-id (graph->node graph node-id) label override-filter-fn)))
 
   (sources
     [this node-id]
@@ -516,7 +525,7 @@
               deps (reduce conj! deps (for [label dep-labels
 	                                           override overrides]
 	                                       [override label]))
-              deps (loop [arcs (basis-arcs-by-head basis graph node-id label override-filter-fn)
+              deps (loop [arcs (basis-arcs-by-head basis graph node-id node label override-filter-fn)
                           res deps]
                      (if-let [^ArcBase arc (first arcs)]
                        (let [tgt-id (.target arc)
