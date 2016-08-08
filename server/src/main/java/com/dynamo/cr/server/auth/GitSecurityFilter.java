@@ -109,7 +109,7 @@ public class GitSecurityFilter implements Filter {
 
         if (user != null) {
             // NOTE: if user == null sendError is set from authenticate
-            // This could be improved
+            // This could be improved lkj lkj
             if (verifyRole(user, projectId)) {
                 // Successful. Continue filter-chain
                 chain.doFilter(request, response);
