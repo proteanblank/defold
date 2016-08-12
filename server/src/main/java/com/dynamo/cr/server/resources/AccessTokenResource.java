@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.server.auth.AccessTokenAuthenticator;
 import com.dynamo.inject.persist.Transactional;
 
@@ -25,6 +26,7 @@ public class AccessTokenResource extends BaseResource {
 
     @POST
     @Transactional
+    @Timed
     public Response generateNewToken(@Context HttpServletRequest httpServletRequest) {
         return okResponse(accessTokenAuthenticator.createLifetimeToken(getUser(), httpServletRequest.getRemoteAddr()));
     }

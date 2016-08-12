@@ -4,6 +4,7 @@ import com.dynamo.cr.server.model.ModelUtil;
 import com.dynamo.cr.server.model.Project;
 import com.dynamo.cr.server.model.User;
 import com.dynamo.cr.server.model.User.Role;
+import com.google.inject.servlet.RequestScoped;
 import com.sun.jersey.api.container.MappableContainerException;
 import com.sun.jersey.spi.container.ContainerRequest;
 import com.sun.jersey.spi.container.ContainerRequestFilter;
@@ -24,6 +25,7 @@ import java.net.URLDecoder;
 import java.security.Principal;
 import java.util.Objects;
 
+@RequestScoped
 public class SecurityFilter implements ContainerRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SecurityFilter.class);
@@ -75,7 +77,7 @@ public class SecurityFilter implements ContainerRequestFilter {
             return null;
         }
 
-        EntityManager em = emf.createEntityManager();
+        EntityManager em = null;//emf.createEntityManager();
 
         if (authToken != null && email != null) {
             try {

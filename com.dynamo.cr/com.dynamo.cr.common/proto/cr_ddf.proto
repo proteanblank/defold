@@ -51,6 +51,12 @@ message Configuration
     optional int32 git_gc_interval = 44 [default=1440];
     // Garbage collect unused object expiration for pruning
     optional string git_prune_expiration = 45 [default="2 weeks ago"];
+
+    // Execution environment (dev, test, prod)
+    required string environment = 46;
+
+    // Metrics
+    optional Metrics metrics = 47;
 }
 
 message EMailTemplate
@@ -64,4 +70,10 @@ message InvitationCountEntry
 {
     required int32 key = 1;
     required int32 value = 2;
+}
+
+message Metrics
+{
+    required string influx_db_url = 1;
+    required string influx_db_name = 2;
 }

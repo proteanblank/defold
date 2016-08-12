@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.protocol.proto.Protocol.LoginInfo;
 import com.dynamo.cr.server.ServerException;
 import com.dynamo.cr.server.auth.AccessTokenAuthenticator;
@@ -28,6 +29,7 @@ public class LoginResource extends BaseResource {
 
     @GET
     @Transactional
+    @Timed
     public Response login(@Context HttpHeaders headers, @Context HttpServletRequest request) {
 
         String email = headers.getRequestHeaders().getFirst("X-Email");

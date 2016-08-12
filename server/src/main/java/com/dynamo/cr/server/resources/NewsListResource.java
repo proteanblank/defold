@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.protocol.proto.Protocol;
 import com.dynamo.cr.protocol.proto.Protocol.NewsSubscriberList;
 import com.dynamo.cr.server.model.ModelUtil;
@@ -21,6 +22,7 @@ public class NewsListResource extends BaseResource {
     @Path("/{email}/{key}")
     @Transactional
     @RolesAllowed(value = {"anonymous"})
+    @Timed
     public Response deleteSubscription(@PathParam("email") String email,
                                        @PathParam("key") String key) {
 
@@ -43,6 +45,7 @@ public class NewsListResource extends BaseResource {
     @RolesAllowed(value = {"user"})
     @Transactional
     @Path("/{user}/subscribe")
+    @Timed
     public Response subscribe() {
         User u = getUser();
 
@@ -62,6 +65,7 @@ public class NewsListResource extends BaseResource {
     @GET
     @RolesAllowed(value = {"user"})
     @Path("/{user}/subscribe")
+    @Timed
     public String subscribed() {
         User user = getUser();
 
@@ -82,6 +86,7 @@ public class NewsListResource extends BaseResource {
     @RolesAllowed(value = {"user"})
     @Transactional
     @Path("/{user}/subscribe")
+    @Timed
     public Response unsubscribe() {
         User u = getUser();
 
@@ -99,6 +104,7 @@ public class NewsListResource extends BaseResource {
 
     @GET
     @RolesAllowed(value = {"admin"})
+    @Timed
     public NewsSubscriberList getNewsSubscribers() {
         TypedQuery<NewsSubscriber> query = em.createQuery("select s from NewsSubscriber s", NewsSubscriber.class);
         List<NewsSubscriber> subscribers = query.getResultList();

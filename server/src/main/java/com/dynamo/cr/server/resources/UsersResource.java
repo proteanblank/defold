@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.protocol.proto.Protocol.InvitationAccountInfo;
 import com.dynamo.cr.protocol.proto.Protocol.RegisterUser;
 import com.dynamo.cr.protocol.proto.Protocol.UserInfo;
@@ -51,6 +52,7 @@ public class UsersResource extends BaseResource {
 
     @GET
     @Path("/{email}")
+    @Timed
     public UserInfo getUserInfo(@PathParam("email") String email) {
         User u = ModelUtil.findUserByEmail(em, email);
         if (u == null) {
@@ -63,6 +65,7 @@ public class UsersResource extends BaseResource {
     @PUT
     @Path("/{user}/connections/{user2}")
     @Transactional
+    @Timed
     public void connect(@PathParam("user2") Long user2) {
         User u = getUser();
         User u2 = userService.find(user2)
@@ -78,6 +81,7 @@ public class UsersResource extends BaseResource {
 
     @GET
     @Path("/{user}/connections")
+    @Timed
     public UserInfoList getConnections() {
         User u = getUser();
 
@@ -93,6 +97,7 @@ public class UsersResource extends BaseResource {
     @GET
     @Path("/{user}/remove")
     @Transactional
+    @Timed
     public Response remove(@PathParam("user") Long userId) {
         User user = getUser();
 
@@ -147,6 +152,7 @@ public class UsersResource extends BaseResource {
     @POST
     @RolesAllowed(value = {"admin"})
     @Transactional
+    @Timed
     public UserInfo registerUser(RegisterUser registerUser) {
         /*
          * NOTE: Old registration method as admin role
@@ -168,6 +174,7 @@ public class UsersResource extends BaseResource {
     @PUT
     @Path("/{user}/invite/{email}")
     @Transactional
+    @Timed
     public Response invite(@PathParam("user") String user, @PathParam("email") String email) {
         InvitationAccount a = server.getInvitationAccount(em, user);
         if (a.getCurrentCount() == 0) {
@@ -186,6 +193,7 @@ public class UsersResource extends BaseResource {
     @GET
     @Path("/{user}/invitation_account")
     @Transactional
+    @Timed
     public InvitationAccountInfo getInvitationAccount(@PathParam("user") String user) {
         InvitationAccount a = server.getInvitationAccount(em, user);
         return createInvitationAccountInfo(a);

@@ -68,6 +68,12 @@ dependencies {
     compile 'com.google.guava:guava:19.0'
     compile 'org.mindrot:jbcrypt:0.3m'
 
+    compile 'io.dropwizard.metrics:metrics-core:3.1.0'
+    compile 'io.dropwizard.metrics:metrics-jvm:3.1.0'
+    compile 'io.dropwizard.metrics:metrics-jersey:3.1.0'
+
+    compile 'org.influxdb:influxdb-java:2.2'
+
     testCompile 'org.mockito:mockito-all:1.10.19'
     testCompile 'org.apache.derby:derby:10.11.1.1'
     testCompile 'commons-configuration:commons-configuration:1.10'

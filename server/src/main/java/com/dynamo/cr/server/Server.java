@@ -1,5 +1,10 @@
 package com.dynamo.cr.server;
 
+import com.codahale.metrics.ConsoleReporter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
+import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
+import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.dynamo.cr.proto.Config.Configuration;
 import com.dynamo.cr.proto.Config.EMailTemplate;
 import com.dynamo.cr.proto.Config.InvitationCountEntry;
@@ -11,6 +16,7 @@ import com.dynamo.cr.server.git.archive.ArchiveCache;
 import com.dynamo.cr.server.git.archive.GitArchiveProvider;
 import com.dynamo.cr.server.mail.EMail;
 import com.dynamo.cr.server.mail.IMailProcessor;
+import com.dynamo.cr.server.metrics.InfluxDBReporter;
 import com.dynamo.cr.server.model.*;
 import com.dynamo.cr.server.model.User.Role;
 import com.dynamo.cr.server.resources.*;
@@ -63,6 +69,7 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Server {
     private static final Logger LOGGER = LoggerFactory.getLogger(Server.class);
@@ -74,6 +81,7 @@ public class Server {
     private SecureRandom secureRandom;
     private IMailProcessor mailProcessor;
     private ExecutorService executorService;
+    private static final MetricRegistry metrics = new MetricRegistry();
 
     // Value it retrieved from configuration in order to
     // be run-time changeable. Required for unit-tests
@@ -264,6 +272,20 @@ public class Server {
         this.mailProcessor.start();
 
         this.executorService = Executors.newSingleThreadExecutor();
+
+        // Setup metrics reporting
+        ConsoleReporter reporter = ConsoleReporter.forRegistry(metrics)
+                .convertRatesTo(TimeUnit.SECONDS)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
+                .build();
+        reporter.start(1, TimeUnit.MINUTES);
+
+        InfluxDBReporter influxDBReporter = new InfluxDBReporter(metrics, TimeUnit.SECONDS, TimeUnit.MILLISECONDS, false);
+        influxDBReporter.start(1, TimeUnit.MINUTES);
+
+        metrics.registerAll(new GarbageCollectorMetricSet());
+        metrics.registerAll(new MemoryUsageGaugeSet());
+        metrics.registerAll(new ThreadStatesGaugeSet());
     }
 
     private ExecutorService getExecutorService() {
@@ -281,8 +303,8 @@ public class Server {
     private void bootStrapUsers() {
         EntityManager em = emf.createEntityManager();
         em.getTransaction().begin();
-        String[][] users = new String[][] {
-                { "dynamogameengine@gmail.com", "admin", "Mr", "Admin" } };
+        String[][] users = new String[][]{
+                {"dynamogameengine@gmail.com", "admin", "Mr", "Admin"}};
 
         for (String[] entry : users) {
             User dynamoUser = ModelUtil.findUserByEmail(em, entry[0]);
@@ -386,6 +408,7 @@ public class Server {
     /**
      * Calculate semi secure hash for signed executable
      * This is used for downloading without the requirement to be signed in
+     *
      * @param project
      * @return hash
      */
@@ -432,7 +455,7 @@ public class Server {
         List<Invitation> lst = q.setParameter("email", email).getResultList();
         if (lst.size() > 0) {
             String msg = String.format("The email %s is already registred. An invitation will be sent to you as soon as we can " +
-                                       "handle the high volume of registrations.", email);
+                    "handle the high volume of registrations.", email);
             ResourceUtil.throwWebApplicationException(Status.CONFLICT, msg);
         }
 
@@ -466,7 +489,9 @@ public class Server {
         getExecutorService().execute(() -> {
             try {
                 Thread.sleep(100);
-            } catch (InterruptedException e) { e.printStackTrace(); }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             getMailProcessor().process();
         });
 

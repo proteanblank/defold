@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.proto.Config;
 import com.dynamo.cr.protocol.proto.Protocol.Log;
 import com.dynamo.cr.protocol.proto.Protocol.ProjectInfo;
@@ -129,6 +130,7 @@ public class ProjectResource extends BaseResource {
     @HEAD
     @Path("/archive/{version}")
     @RolesAllowed(value = {"member"})
+    @Timed
     public Response getArchiveHead(@PathParam("project") String project,
                                    @PathParam("version") String version) throws IOException {
 
@@ -147,6 +149,7 @@ public class ProjectResource extends BaseResource {
     @GET
     @Path("/archive")
     @RolesAllowed(value = {"member"})
+    @Timed
     public Response getArchive(@PathParam("project") String project,
                                @HeaderParam("If-None-Match") String ifNoneMatch) throws IOException {
         return getArchive(project, "HEAD", ifNoneMatch);
@@ -155,6 +158,7 @@ public class ProjectResource extends BaseResource {
     @GET
     @Path("/archive/{version: .+}")
     @RolesAllowed(value = {"member"})
+    @Timed
     public Response getArchive(@PathParam("project") String project,
                                @PathParam("version") String version,
                                @HeaderParam("If-None-Match") String ifNoneMatch) throws IOException {
@@ -191,6 +195,7 @@ public class ProjectResource extends BaseResource {
     @Path("/members")
     @RolesAllowed(value = {"member"})
     @Transactional
+    @Timed
     public void addMember(@PathParam("project") Long projectId,
                           String memberEmail) {
         User user = getUser();
@@ -215,6 +220,7 @@ public class ProjectResource extends BaseResource {
     @DELETE
     @Path("/members/{id}")
     @Transactional
+    @Timed
     public void removeMember(@PathParam("project") Long projectId,
                              @PathParam("id") Long memberId) {
         // Ensure user is valid
@@ -242,6 +248,7 @@ public class ProjectResource extends BaseResource {
 
     @GET
     @Path("/project_info")
+    @Timed
     public ProjectInfo getProjectInfo(@PathParam("project") Long projectId) {
         User user = getUser();
         Project project = projectService.find(projectId)
@@ -254,6 +261,7 @@ public class ProjectResource extends BaseResource {
     @RolesAllowed(value = {"owner"})
     @Transactional
     @Path("/project_info")
+    @Timed
     public void updateProjectInfo(@PathParam("project") Long projectId, ProjectInfo projectInfo) {
         Project project = projectService.find(projectId)
                 .orElseThrow(() -> new ServerException(String.format("No such project %s", projectId)));
@@ -265,6 +273,7 @@ public class ProjectResource extends BaseResource {
     @RolesAllowed(value = {"owner"})
     @Transactional
     @Path("/change_owner")
+    @Timed
     public void changeOwner(@PathParam("project") Long projectId, @QueryParam("newOwnerId") Long newOwnerId) {
 
         if (newOwnerId == null) {
@@ -306,6 +315,7 @@ public class ProjectResource extends BaseResource {
 
     @GET
     @Path("/log")
+    @Timed
     public Log log(@PathParam("project") String project, @QueryParam("max_count") int maxCount) throws Exception {
         return server.log(em, project, maxCount);
     }
@@ -313,6 +323,7 @@ public class ProjectResource extends BaseResource {
     @DELETE
     @RolesAllowed(value = {"owner"})
     @Transactional
+    @Timed
     public void deleteProject(@PathParam("project") Long projectId) {
         Project project = projectService.find(projectId)
                 .orElseThrow(() -> new ServerException(String.format("No such project %s", projectId)));
@@ -331,6 +342,7 @@ public class ProjectResource extends BaseResource {
     @Consumes(MediaType.APPLICATION_OCTET_STREAM)
     @RolesAllowed(value = {"member"})
     @Path("/engine/{platform}")
+    @Timed
     public Response uploadEngine(@PathParam("project") String projectId,
                                  @PathParam("platform") String platform,
                                  InputStream stream) throws IOException {
@@ -369,6 +381,7 @@ public class ProjectResource extends BaseResource {
     @GET
     @RolesAllowed(value = {"anonymous"})
     @Path("/engine/{platform}/{key}.ipa")
+    @Timed
     public Response downloadEngine(@PathParam("project") Long projectId,
                                    @PathParam("key") String key,
                                    @PathParam("platform") String platform) throws IOException {
@@ -404,6 +417,7 @@ public class ProjectResource extends BaseResource {
     @RolesAllowed(value = {"anonymous"})
     @Produces({"text/xml"})
     @Path("/engine_manifest/{platform}/{key}")
+    @Timed
     public String downloadEngineManifest(@PathParam("owner") String owner,
                                          @PathParam("project") Long projectId,
                                          @PathParam("key") String key,

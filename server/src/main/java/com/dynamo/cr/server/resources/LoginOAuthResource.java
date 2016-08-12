@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.protocol.proto.Protocol.LoginInfo;
 import com.dynamo.cr.protocol.proto.Protocol.TokenExchangeInfo;
 import com.dynamo.cr.protocol.proto.Protocol.TokenExchangeInfo.Type;
@@ -84,6 +85,7 @@ public class LoginOAuthResource extends BaseResource {
 
     @GET
     @Path("/{provider}")
+    @Timed
     public Response oauth(@Context HttpServletRequest req,
                           @Context HttpServletResponse resp,
                           @QueryParam("redirect_to") String redirectTo) throws ServletException, IOException {
@@ -136,6 +138,7 @@ public class LoginOAuthResource extends BaseResource {
 
     @GET
     @Path("/{provider}/response")
+    @Timed
     public Response oauthIdResponseGet(@Context HttpHeaders headers,
                                        @Context UriInfo uriInfo,
                                        @Context HttpServletRequest req,
@@ -200,6 +203,7 @@ public class LoginOAuthResource extends BaseResource {
     @GET
     @Path("/exchange/{token}")
     @Transactional
+    @Timed
     public TokenExchangeInfo exchangeToken(@Context HttpHeaders headers,
                                            @Context UriInfo uriInfo,
                                            @PathParam("token") String token) {
@@ -253,6 +257,7 @@ public class LoginOAuthResource extends BaseResource {
     @PUT
     @Path("/register/{token}")
     @Transactional
+    @Timed
     public Response register(@PathParam("token") String token,
                              @QueryParam("key") String key) {
 

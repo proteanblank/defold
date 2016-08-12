@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources;
 
+import com.codahale.metrics.annotation.Timed;
 import com.dynamo.cr.proto.Config.Configuration;
 import com.dynamo.cr.proto.Config.ProjectTemplate;
 import com.dynamo.cr.protocol.proto.Protocol.NewProject;
@@ -44,6 +45,7 @@ public class ProjectsResource extends BaseResource {
 
     @POST
     @Transactional
+    @Timed
     public ProjectInfo newProject(NewProject newProject) {
         User user = getUser();
 
@@ -99,6 +101,7 @@ public class ProjectsResource extends BaseResource {
     }
 
     @GET
+    @Timed
     public ProjectInfoList getProjects() {
         User user = getUser();
         List<Project> list = em.createQuery("select p from Project p where :user member of p.members", Project.class).setParameter("user", user).getResultList();

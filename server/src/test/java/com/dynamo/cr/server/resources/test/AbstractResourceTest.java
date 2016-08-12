@@ -1,5 +1,6 @@
 package com.dynamo.cr.server.resources.test;
 
+import com.codahale.metrics.jersey.InstrumentedResourceMethodDispatchAdapter;
 import com.dynamo.cr.proto.Config.Configuration;
 import com.dynamo.cr.server.ConfigurationProvider;
 import com.dynamo.cr.server.Server;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 
 public class AbstractResourceTest {
 
@@ -117,6 +119,8 @@ public class AbstractResourceTest {
             bind(IMailer.class).toInstance(mailer);
             bind(AccessTokenStore.class);
             bind(AccessTokenAuthenticator.class);
+
+            bind(InstrumentedResourceMethodDispatchAdapter.class).toInstance(mock(InstrumentedResourceMethodDispatchAdapter.class));
 
             Properties props = new Properties();
             props.put(PersistenceUnitProperties.CLASSLOADER, this.getClass().getClassLoader());
