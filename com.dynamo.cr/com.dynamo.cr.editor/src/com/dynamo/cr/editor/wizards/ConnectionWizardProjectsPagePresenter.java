@@ -7,6 +7,7 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IWorkbenchPage;
 
 import com.dynamo.cr.client.ClientUtils;
+import com.dynamo.cr.client.IClientFactory;
 import com.dynamo.cr.client.IProjectClient;
 import com.dynamo.cr.client.IProjectsClient;
 import com.dynamo.cr.client.RepositoryException;
@@ -27,13 +28,15 @@ public class ConnectionWizardProjectsPagePresenter {
         Shell getShell();
     }
 
-    private IDisplay display;
+    private final IDisplay display;
     private IProjectsClient client;
-    private ConnectionWizardBranchPagePresenter branchPresenter;
+    private final ConnectionWizardBranchPagePresenter branchPresenter;
+    private final IClientFactory clientFactory;
 
-    public ConnectionWizardProjectsPagePresenter(IDisplay display, IWorkbenchPage page, ConnectionWizardBranchPagePresenter branchPresenter) {
+    public ConnectionWizardProjectsPagePresenter(IDisplay display, IWorkbenchPage page, ConnectionWizardBranchPagePresenter branchPresenter, IClientFactory clientFactory) {
         this.display = display;
         this.branchPresenter = branchPresenter;
+        this.clientFactory = clientFactory;
     }
 
     public void onSelectProject(ProjectInfo projectInfo) {
@@ -41,7 +44,7 @@ public class ConnectionWizardProjectsPagePresenter {
             URI uri = ClientUtils.getProjectUri(client, projectInfo.getId());
             IProjectClient projectClient;
             try {
-                projectClient = client.getClientFactory().getProjectClient(uri);
+                projectClient = clientFactory.getProjectClient(uri);
                 branchPresenter.setProjectResourceClient(projectClient);
                 display.setErrorMessage(null);
                 display.setPageComplete(canFinish());
@@ -73,5 +76,4 @@ public class ConnectionWizardProjectsPagePresenter {
     public boolean canFinish() {
         return display.getErrorMessage() == null && display.getSelectedProject() != null;
     }
-
 }

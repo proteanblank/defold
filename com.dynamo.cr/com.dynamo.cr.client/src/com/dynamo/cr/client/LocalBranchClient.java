@@ -21,7 +21,6 @@ import com.dynamo.cr.protocol.proto.Protocol.UserInfo;
 
 public class LocalBranchClient implements IBranchClient {
 
-    private IClientFactory factory;
     private URI uri;
     private LocalBranchRepository branchRepository;
     private long projectId;
@@ -30,8 +29,7 @@ public class LocalBranchClient implements IBranchClient {
     private String branch;
     private String branchRoot;
 
-    /* package*/ LocalBranchClient(IClientFactory factory, URI uri, UserInfo userInfo, ProjectInfo projectInfo, String branchRoot, String email, String password) {
-        this.factory = factory;
+    LocalBranchClient(URI uri, UserInfo userInfo, ProjectInfo projectInfo, String branchRoot, String email, String password) {
         this.uri = uri;
         this.projectId = projectInfo.getId();
         this.project = Long.toString(projectId);
@@ -62,11 +60,6 @@ public class LocalBranchClient implements IBranchClient {
     @Override
     public String getNativeLocation() {
         return new Path(branchRoot).append(project).append(user).append(branch).toOSString();
-    }
-
-    @Override
-    public IClientFactory getClientFactory() {
-        return factory;
     }
 
     @Override

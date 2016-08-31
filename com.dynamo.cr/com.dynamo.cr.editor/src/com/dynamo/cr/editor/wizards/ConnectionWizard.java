@@ -27,7 +27,7 @@ public class ConnectionWizard extends Wizard {
         branchView.setPresenter(branchPresenter);
 
         projectView = new ConnectionWizardProjectsPageView("Branch");
-        projectPresenter = new ConnectionWizardProjectsPagePresenter(projectView, page, branchPresenter);
+        projectPresenter = new ConnectionWizardProjectsPagePresenter(projectView, page, branchPresenter, Activator.getDefault().getClientFactory());
         projectPresenter.setProjectsResourceClient(Activator.getDefault().projectsClient);
         projectView.setPresenter(projectPresenter);
 

@@ -24,17 +24,14 @@ import com.sun.jersey.api.client.ClientResponse.Status;
 import com.sun.jersey.api.client.WebResource;
 
 public class LocalProjectClient implements IProjectClient {
+    private final URI uri;
+    private final long projectId;
+    private final LocalBranchRepository branchRepository;
+    private final String project;
+    private final String user;
+    private final Client client;
 
-    private IClientFactory factory;
-    private URI uri;
-    private long projectId;
-    private LocalBranchRepository branchRepository;
-    private String project;
-    private String user;
-    private Client client;
-
-    /* package*/ LocalProjectClient(IClientFactory factory, URI uri, Client client, UserInfo userInfo, ProjectInfo projectInfo, String branchRoot, String email, String password) {
-        this.factory = factory;
+    LocalProjectClient(URI uri, Client client, UserInfo userInfo, ProjectInfo projectInfo, String branchRoot, String email, String password) {
         this.uri = uri;
         this.client = client;
         this.projectId = projectInfo.getId();
@@ -52,11 +49,6 @@ public class LocalProjectClient implements IProjectClient {
                                                      userInfo,
                                                      password,
                                                      repositoryRootUrl.getHost());
-    }
-
-    @Override
-    public IClientFactory getClientFactory() {
-        return factory;
     }
 
     @Override

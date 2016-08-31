@@ -24,7 +24,6 @@ public class DefoldAuthFilter extends ClientFilter {
 
     private String authToken;
     private String email;
-    private String password;
 
     /**
      * Creates a new filter using email, authToken and password and sets corresponding HTTP headers. email is mandatory but
@@ -34,10 +33,9 @@ public class DefoldAuthFilter extends ClientFilter {
      * @param authToken authToken. Optional argument.
      * @param password password to set. Optional argument.
      */
-    public DefoldAuthFilter(String email, String authToken, String password) {
+    public DefoldAuthFilter(String email, String authToken) {
         this.email = email;
         this.authToken = authToken;
-        this.password = password;
     }
 
     @Override
@@ -48,11 +46,6 @@ public class DefoldAuthFilter extends ClientFilter {
         }
 
         headers.add("X-Email", this.email);
-
-        // Send only password if password is set and authToken is not set.
-        if (this.password != null && authToken == null) {
-            headers.add("X-Password", this.password);
-        }
 
         ClientResponse response = getNext().handle(cr);
         List<NewCookie> cookies = response.getCookies();
@@ -72,5 +65,4 @@ public class DefoldAuthFilter extends ClientFilter {
     public void setauthToken(String authToken) {
         this.authToken = authToken;
     }
-
 }

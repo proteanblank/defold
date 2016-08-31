@@ -30,7 +30,7 @@ public interface IClientFactory {
      * @param uri URI to get {@link IProjectClient} from
      * @return A new {@link IProjectsClient}
      */
-    public IProjectsClient getProjectsClient(URI uri);
+    public IProjectsClient getProjectsClient();
 
     /**
      * Get {@link IBranchClient} from uri
@@ -45,6 +45,6 @@ public interface IClientFactory {
      * @param uri URI to get {@link IUsersClient} from
      * @return A new {@link IBranchClient}
      */
-    public IUsersClient getUsersClient(URI uri);
+    public IUsersClient getUsersClient();
 
 }

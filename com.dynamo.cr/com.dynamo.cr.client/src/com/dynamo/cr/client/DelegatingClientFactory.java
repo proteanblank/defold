@@ -20,7 +20,7 @@ public class DelegatingClientFactory implements IClientFactory {
     private Map<URI, IProjectClient> projectClients = new HashMap<URI, IProjectClient>();
     private Map<URI, IProjectsClient> projectsClients = new HashMap<URI, IProjectsClient>();
     private Map<URI, IBranchClient> branchClients = new HashMap<URI, IBranchClient>();
-    private Map<URI, IUsersClient> usersClients = new HashMap<URI, IUsersClient>();
+    private IUsersClient usersClient = null;
 
     public DelegatingClientFactory(IClientFactory factory) {
         this.factory = factory;
@@ -63,11 +63,10 @@ public class DelegatingClientFactory implements IClientFactory {
     }
 
     @Override
-    public IUsersClient getUsersClient(URI uri) {
-        uri = normalize(uri);
-        if (!usersClients.containsKey(uri)) {
-            usersClients.put(uri, factory.getUsersClient(uri));
+    public IUsersClient getUsersClient() {
+        if (usersClient == null) {
+        	usersClient = factory.getUsersClient();
         }
-        return usersClients.get(uri);
+        return usersClient;
     }
 }

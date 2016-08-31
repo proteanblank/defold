@@ -16,8 +16,7 @@ public class BranchClient extends BaseClient implements IBranchClient {
 
     // NOTE: Only public for package
     BranchClient(IClientFactory factory, URI uri, Client client) {
-        super(factory, uri);
-        this.resource = client.resource(uri);
+        super(client.resource(uri));
     }
 
     @Override

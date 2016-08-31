@@ -17,7 +17,6 @@ import org.eclipse.core.runtime.Platform;
 import org.osgi.framework.Bundle;
 
 import com.dynamo.cr.client.IBranchClient;
-import com.dynamo.cr.client.IClientFactory;
 import com.dynamo.cr.client.RepositoryException;
 import com.dynamo.cr.protocol.proto.Protocol.BranchStatus;
 import com.dynamo.cr.protocol.proto.Protocol.CommitDesc;
@@ -183,11 +182,6 @@ public class MockBranchClient implements IBranchClient {
 
     @Override
     public void publish() throws RepositoryException {
-        throw new RuntimeException("Not impl.");
-    }
-
-    @Override
-    public IClientFactory getClientFactory() {
         throw new RuntimeException("Not impl.");
     }
 

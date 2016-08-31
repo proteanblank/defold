@@ -72,8 +72,6 @@ import com.dynamo.cr.client.IProjectClient;
 import com.dynamo.cr.client.IProjectsClient;
 import com.dynamo.cr.client.IUsersClient;
 import com.dynamo.cr.client.RepositoryException;
-import com.dynamo.cr.client.filter.DefoldAuthFilter;
-import com.dynamo.cr.common.providers.ProtobufProviders;
 import com.dynamo.cr.editor.core.EditorUtil;
 import com.dynamo.cr.editor.dialogs.OpenIDLoginDialog;
 import com.dynamo.cr.editor.fs.RepositoryFileSystemPlugin;
@@ -83,9 +81,6 @@ import com.dynamo.cr.editor.ui.AbstractDefoldPlugin;
 import com.dynamo.cr.protocol.proto.Protocol.ProjectInfo;
 import com.dynamo.cr.protocol.proto.Protocol.UserInfo;
 import com.dynamo.cr.rlog.RLogPlugin;
-import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.config.ClientConfig;
-import com.sun.jersey.api.client.config.DefaultClientConfig;
 
 public class Activator extends AbstractDefoldPlugin implements IPropertyChangeListener, IResourceChangeListener,
         IBranchListener {
@@ -108,18 +103,28 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
     public static final String THEIRS_IMAGE_ID = "THEIRS";
     public static final String LIBRARY_IMAGE_ID = "LIBRARY";
 
-    // The shared instance
-    private static Activator plugin;
-
-    private static BundleContext context;
-
-    boolean branchListenerAdded = false;
-
     public static final int SERVER_PORT = 8080;
 
-    static BundleContext getContext() {
-        return context;
-    }
+    private static final Logger LOGGER = LoggerFactory.getLogger(Activator.class);
+
+    // The shared instance
+    private static Activator plugin;
+    private static BundleContext context;
+
+    public IProjectClient projectClient;
+    public String activeBranch;
+    public UserInfo userInfo;
+    public IProjectsClient projectsClient;
+
+    private boolean branchListenerAdded = false;
+    private IBranchClient branchClient;
+    private IClientFactory factory;
+
+    @SuppressWarnings("rawtypes")
+    private ServiceTracker proxyTracker;
+
+    private IProject project;
+    private Server httpServer;
 
     /**
      * Returns the shared instance
@@ -141,26 +146,9 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
         return imageDescriptorFromPlugin(PLUGIN_ID, path);
     }
 
-    public IProjectClient projectClient;
-
-    private IBranchClient branchClient;
-
-    public String activeBranch;
-
-    private static Logger logger = LoggerFactory.getLogger(Activator.class);
-
-    private IClientFactory factory;
-
-    @SuppressWarnings("rawtypes")
-    private ServiceTracker proxyTracker;
-
-    public UserInfo userInfo;
-
-    public IProjectsClient projectsClient;
-
-    private IProject project;
-
-    private Server httpServer;
+    static BundleContext getContext() {
+        return context;
+    }
 
     public IProxyService getProxyService() {
         return (IProxyService) proxyTracker.getService();
@@ -230,13 +218,12 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
         // "System property http.nonProxyHosts has been set to local|*.local|169.254/16|*.169.254/16 by an external source. This value will be overwritten using the values from the preferences"
         System.clearProperty("http.nonProxyHosts");
 
-        proxyTracker = new ServiceTracker(bundleContext, IProxyService.class
-                .getName(), null);
+        proxyTracker = new ServiceTracker(bundleContext, IProxyService.class.getName(), null);
         proxyTracker.open();
 
         //connectProjectClient();
         store.addPropertyChangeListener(this);
-        // TODO This is a hack to make sure noone is using remote branches, which is not currently supported
+        // TODO This is a hack to make sure none is using remote branches, which is not currently supported
         store.setValue(PreferenceConstants.P_USE_LOCAL_BRANCHES, true);
         updateSocksProxy();
 
@@ -261,8 +248,7 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
         if (!socks_proxy.isEmpty()) {
             System.setProperty("socksProxyHost", socks_proxy);
             System.setProperty("socksProxyPort", Integer.toString(socks_proxy_port));
-        }
-        else {
+        } else {
             System.clearProperty("socksProxyHost");
             System.clearProperty("socksProxyPort");
         }
@@ -284,7 +270,6 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
         } catch (CoreException e) {
             Activator.logException(e);
         }
-
     }
 
     public IClientFactory getClientFactory() {
@@ -317,21 +302,10 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
             }
         }
 
-        ClientConfig cc = new DefaultClientConfig();
-        cc.getClasses().add(ProtobufProviders.ProtobufMessageBodyReader.class);
-        cc.getClasses().add(ProtobufProviders.ProtobufMessageBodyWriter.class);
-
         IPreferenceStore store = getPreferenceStore();
-        String email = store.getString(PreferenceConstants.P_EMAIL);
-        String authToken = store.getString(PreferenceConstants.P_AUTH_TOKEN);
-        String baseUriString = store.getString(PreferenceConstants.P_SERVER_URI);
-        String usersUriString = String.format("%s/users", baseUriString);
-
-        DefoldAuthFilter authFilter = new DefoldAuthFilter(email, authToken, null);
-        Client client = Client.create(cc);
-        client.addFilter(authFilter);
         BranchLocation branchLocation;
         String branchRoot = null;
+
         if (store.getBoolean(PreferenceConstants.P_USE_LOCAL_BRANCHES)) {
             branchLocation = BranchLocation.LOCAL;
             // TODO: Use getInstallLocation() or not?
@@ -343,13 +317,18 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
         } else {
             branchLocation = BranchLocation.REMOTE;
         }
-        factory = new DelegatingClientFactory(new ClientFactory(client, branchLocation, branchRoot, email, authToken));
+
+        String email = store.getString(PreferenceConstants.P_EMAIL);
+        String authToken = store.getString(PreferenceConstants.P_AUTH_TOKEN);
+        String baseUriString = store.getString(PreferenceConstants.P_SERVER_URI);
+
+        factory = new DelegatingClientFactory(new ClientFactory(branchLocation, branchRoot, email, authToken, baseUriString));
         RepositoryFileSystemPlugin.setClientFactory(factory);
 
         boolean validAuthToken = false;
         if (email != null && !email.isEmpty() && authToken != null && !authToken.isEmpty()) {
             // Try to validate auth-cookie
-            IUsersClient usersClient = factory.getUsersClient(UriBuilder.fromUri(usersUriString).build());
+            IUsersClient usersClient = factory.getUsersClient();
 
             try {
                 @SuppressWarnings("unused")
@@ -369,18 +348,16 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
             }
             email = openIDdialog.getEmail();
             authToken = openIDdialog.getAuthToken();
-            authFilter.setEmail(email);
-            authFilter.setauthToken(authToken);
 
             // Recreate factory since we now have credentials
-            factory = new DelegatingClientFactory(new ClientFactory(client, branchLocation, branchRoot, email, authToken));
+            factory = new DelegatingClientFactory(new ClientFactory(branchLocation, branchRoot, email, authToken, baseUriString));
             RepositoryFileSystemPlugin.setClientFactory(factory);
 
             store.setValue(PreferenceConstants.P_EMAIL, email);
             store.setValue(PreferenceConstants.P_AUTH_TOKEN, authToken);
         }
 
-        IUsersClient usersClient = factory.getUsersClient(UriBuilder.fromUri(usersUriString).build());
+        IUsersClient usersClient = factory.getUsersClient();
         UserInfo userInfo;
         try {
             userInfo = usersClient.getUserInfo(email);
@@ -390,13 +367,9 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
             StatusManager.getManager().handle(status, StatusManager.SHOW | StatusManager.LOG);
             return false;
         }
+
         this.userInfo = userInfo;
-        String projectsUriString = String.format("%s/projects/%d", baseUriString, userInfo.getId());
-
-        URI projectsUri;
-        projectsUri = UriBuilder.fromUri(projectsUriString).build();
-
-        projectsClient = factory.getProjectsClient(projectsUri);
+        this.projectsClient = factory.getProjectsClient();
 
         return true;
     }
@@ -426,7 +399,7 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
             try {
                 httpServer.stop();
             } catch (Exception e) {
-                logger.warn("Failed to stop http server", e);
+                LOGGER.warn("Failed to stop http server", e);
             }
             httpServer = null;
         }
@@ -484,7 +457,7 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
 
         this.projectClient = projectClient;
         URI uri = ClientUtils.getBranchUri(projectClient, branch);
-        this.branchClient = projectClient.getClientFactory().getBranchClient(uri);
+        this.branchClient = factory.getBranchClient(uri);
         activeBranch = branch;
 
         try {
@@ -595,7 +568,6 @@ public class Activator extends AbstractDefoldPlugin implements IPropertyChangeLi
             return null;
         return branchClient.getURI();
     }
-
 
     /*
      * (non-Javadoc)

@@ -1,23 +1,17 @@
 package com.dynamo.cr.client;
 
-
 import java.net.URI;
 
 import com.dynamo.cr.common.providers.ProtobufProviders;
-import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientHandlerException;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 
 public class BaseClient implements IClient {
-    protected Client client;
-    protected WebResource resource;
-    protected IClientFactory factory;
-    protected URI uri;
+    protected  final WebResource resource;
 
-    public BaseClient(IClientFactory factory, URI uri) {
-        this.factory = factory;
-        this.uri = uri;
+    public BaseClient(WebResource resource) {
+        this.resource = resource;
     }
 
     protected void wrapPut(String path, byte[] data) throws RepositoryException {
@@ -27,8 +21,7 @@ public class BaseClient implements IClient {
             if (resp.getStatus() != 200) {
                 ClientUtils.throwRespositoryException(resp);
             }
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
         }
     }
@@ -40,8 +33,7 @@ public class BaseClient implements IClient {
                 ClientUtils.throwRespositoryException(resp);
             }
             return resp.getEntity(klass);
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
             return null; // Never reached
         }
@@ -53,8 +45,7 @@ public class BaseClient implements IClient {
             if (resp.getStatus() != 200 && resp.getStatus() != 204) {
                 ClientUtils.throwRespositoryException(resp);
             }
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
         }
     }
@@ -66,8 +57,7 @@ public class BaseClient implements IClient {
                 ClientUtils.throwRespositoryException(resp);
             }
             return resp.getEntity(klass);
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
             return null; // Never reached
         }
@@ -79,8 +69,7 @@ public class BaseClient implements IClient {
             if (resp.getStatus() != 200 && resp.getStatus() != 204) {
                 ClientUtils.throwRespositoryException(resp);
             }
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
         }
     }
@@ -91,20 +80,13 @@ public class BaseClient implements IClient {
             if (resp.getStatus() != 200 && resp.getStatus() != 204) {
                 ClientUtils.throwRespositoryException(resp);
             }
-        }
-        catch (ClientHandlerException e) {
+        } catch (ClientHandlerException e) {
             ClientUtils.throwRespositoryException(e);
         }
     }
 
     @Override
-    public IClientFactory getClientFactory() {
-        return factory;
-    }
-
-    @Override
     public URI getURI() {
-        return uri;
+        return resource.getURI();
     }
-
 }

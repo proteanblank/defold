@@ -12,7 +12,6 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 
 import com.dynamo.cr.client.IBranchClient;
-import com.dynamo.cr.client.IClientFactory;
 import com.dynamo.cr.client.RepositoryException;
 import com.dynamo.cr.protocol.proto.Protocol.BranchStatus;
 import com.dynamo.cr.protocol.proto.Protocol.CommitDesc;
@@ -172,11 +171,6 @@ public class CachingBranchClient implements IBranchClient {
     @Override
     public void publish() throws RepositoryException {
         client.publish();
-    }
-
-    @Override
-    public IClientFactory getClientFactory() {
-        return client.getClientFactory();
     }
 
     @Override

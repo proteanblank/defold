@@ -17,13 +17,11 @@ public class ProjectClient extends BaseClient implements IProjectClient {
     private long projectId;
 
     /* package*/ ProjectClient(IClientFactory factory, URI uri, Client client) {
-        super(factory, uri);
-        this.client = client;
+        super(client.resource(uri));
         String[] tmp = uri.getPath().split("/");
         // TODO: We should probably not use "full" uri to constructor, ie uri without project id...
         // This parsing is *budget*!
         this.projectId = Long.parseLong(tmp[tmp.length-1]);
-        resource = client.resource(uri);
     }
 
     @Override
