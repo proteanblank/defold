@@ -32,7 +32,7 @@ extern "C"
 namespace dmScript
 {
 #define LIB_NAME "sys"
-    
+
     /*# System API documentation
      *
      * Functions and messages for using system resources, controlling the engine
@@ -42,7 +42,7 @@ namespace dmScript
      * @namespace sys
      */
 
-    const uint32_t MAX_BUFFER_SIZE =  128 * 1024;
+    const uint32_t MAX_BUFFER_SIZE =  256 * 1024;
 
     /*# saves a lua table to a file stored on disk
      * The table can later be loaded by <code>sys.load</code>.
