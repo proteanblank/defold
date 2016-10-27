@@ -29,14 +29,12 @@ extern "C"
 
 #include "script_private.h"
 
-const uint32_t MAX_BUFFER_SIZE = 512 * 1024;
-union {
-    uint32_t align;
-    char buffer[MAX_BUFFER_SIZE]; // Resides in .bss
-} saveload;
-
 namespace dmScript
 {
+
+    const uint32_t MAX_BUFFER_SIZE = 512 * 1024;
+    char g_saveload_buffer[MAX_BUFFER_SIZE]; // Resides in .bss
+
 #define LIB_NAME "sys"
 
     /*# System API documentation
@@ -86,11 +84,11 @@ namespace dmScript
     {
         const char* filename = luaL_checkstring(L, 1);
         luaL_checktype(L, 2, LUA_TTABLE);
-        uint32_t n_used = CheckTable(L, saveload.buffer, sizeof(saveload.buffer), 2);
+        uint32_t n_used = CheckTable(L, g_saveload_buffer, sizeof(g_saveload_buffer), 2);
         FILE* file = fopen(filename, "wb");
         if (file != 0x0)
         {
-            bool result = fwrite(saveload.buffer, 1, n_used, file) == n_used;
+            bool result = fwrite(g_saveload_buffer, 1, n_used, file) == n_used;
             fclose(file);
             if (result)
             {
@@ -118,13 +116,13 @@ namespace dmScript
             lua_newtable(L);
             return 1;
         }
-        fread(saveload.buffer, 1, sizeof(saveload.buffer), file);
+        fread(g_saveload_buffer, 1, sizeof(g_saveload_buffer), file);
         bool file_size_ok = feof(file) != 0;
         bool result = ferror(file) == 0 && file_size_ok;
         fclose(file);
         if (result)
         {
-            PushTable(L, saveload.buffer);
+            PushTable(L, g_saveload_buffer);
             return 1;
         }
         else
