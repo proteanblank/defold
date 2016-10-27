@@ -29,6 +29,12 @@ extern "C"
 
 #include "script_private.h"
 
+const uint32_t MAX_BUFFER_SIZE = 512 * 1024;
+union {
+    uint32_t align;
+    char buffer[MAX_BUFFER_SIZE]; // Resides in .bss
+} saveload;
+
 namespace dmScript
 {
 #define LIB_NAME "sys"
@@ -41,8 +47,6 @@ namespace dmScript
      * @name System
      * @namespace sys
      */
-
-    const uint32_t MAX_BUFFER_SIZE =  256 * 1024;
 
     /*# saves a lua table to a file stored on disk
      * The table can later be loaded by <code>sys.load</code>.
@@ -80,14 +84,13 @@ namespace dmScript
      */
     int Sys_Save(lua_State* L)
     {
-        char buffer[MAX_BUFFER_SIZE];
         const char* filename = luaL_checkstring(L, 1);
         luaL_checktype(L, 2, LUA_TTABLE);
-        uint32_t n_used = CheckTable(L, buffer, sizeof(buffer), 2);
+        uint32_t n_used = CheckTable(L, saveload.buffer, sizeof(saveload.buffer), 2);
         FILE* file = fopen(filename, "wb");
         if (file != 0x0)
         {
-            bool result = fwrite(buffer, 1, n_used, file) == n_used;
+            bool result = fwrite(saveload.buffer, 1, n_used, file) == n_used;
             fclose(file);
             if (result)
             {
@@ -108,7 +111,6 @@ namespace dmScript
     int Sys_Load(lua_State* L)
     {
         //Char arrays function stack are not guaranteed to be 4byte aligned in linux. An union with an int add this guarantee.
-        union {uint32_t dummy_align; char buffer[MAX_BUFFER_SIZE];};
         const char* filename = luaL_checkstring(L, 1);
         FILE* file = fopen(filename, "rb");
         if (file == 0x0)
@@ -116,13 +118,13 @@ namespace dmScript
             lua_newtable(L);
             return 1;
         }
-        fread(buffer, 1, sizeof(buffer), file);
+        fread(saveload.buffer, 1, sizeof(saveload.buffer), file);
         bool file_size_ok = feof(file) != 0;
         bool result = ferror(file) == 0 && file_size_ok;
         fclose(file);
         if (result)
         {
-            PushTable(L, buffer);
+            PushTable(L, saveload.buffer);
             return 1;
         }
         else
