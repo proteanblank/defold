@@ -37,3 +37,11 @@
                   (.toLowerCase)
                   (.indexOf "mac")
                   (>= 0)))
+
+(defn exec [args env]
+  (let [pb (-> (ProcessBuilder. args) (.redirectErrorStream true))]
+    (.putAll (.environment pb) env)
+    (let [p (.start pb)]
+      (with-open [out (.getInputStream p)]
+        (let [s (slurp out)]
+          [(.waitFor p) s])))))
