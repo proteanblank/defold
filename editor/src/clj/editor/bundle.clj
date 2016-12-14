@@ -8,7 +8,9 @@
   (:import [java.io File]
            [javafx.scene Parent Node Scene Group]
            [javafx.stage Stage StageStyle Modality]
-           [com.defold.editor.sign Signer]))
+           [com.defold.editor.sign Signer]
+           [com.google.common.io Files]
+           [org.apache.commons.configuration.plist XMLPropertyListConfiguration]))
 
 (set! *warn-on-reflection* true)
 
@@ -27,6 +29,74 @@
     (prn "!!!!!!!!!!!")
 
     engine))
+
+(defn- extract-entitlement [profile]
+  (let [text-profile (File/createTempFile "mobileprovision" ".plist")]
+    (prn text-profile)
+    (system/exec ["security"  "cms"  "-D"  "-i"  profile "-o"  (.getAbsolutePath text-profile)] {})
+
+    (let [profile-info (XMLPropertyListConfiguration.)
+          entitlements-info (XMLPropertyListConfiguration.)
+          entitlements (File/createTempFile "entitlement" ".xcent")]
+      (with-open [r (io/reader text-profile)]
+        (.load profile-info r))
+      (.append entitlements-info (.configurationAt profile-info "Entitlements"))
+      (.save entitlements-info entitlements)
+      (.getAbsolutePath entitlements))))
+
+(defn- sign-ios-app2 [ipa exe identity profile props]
+  (let [unpack (System/getProperty "defold.unpack.path")
+        codesign (format "%s/bin/codesign" unpack)
+        codesign-alloc (format "%s/bin/codesign_allocate" unpack)
+        package-dir (Files/createTempDir)
+        payload-dir (io/file package-dir "Payload")
+        app-dir (io/file payload-dir "Defold.app")
+        info (XMLPropertyListConfiguration.)]
+    (.mkdirs app-dir)
+    (with-open [r (io/reader (io/resource "bundle/ios/Info-dev-app.plist"))]
+      (.load info r))
+    (doseq [[k v]  props]
+      (.setProperty info k v))
+    (.save info (io/file app-dir "Info.plist"))
+
+    ;; copy icons
+    (doseq [icon ["ios_icon_57.png", "ios_icon_114.png", "ios_icon_72.png", "ios_icon_144.png"]]
+      (io/copy (slurp (io/resource (str "icons/ios/" icon))) (io/file app-dir icon)))
+
+    (io/copy (io/file  profile) (io/file app-dir "embedded.mobileprovision"))
+
+    (io/copy (io/file exe) (io/file app-dir "dmengine"))
+
+    (let [entitlements (extract-entitlement profile)
+          env {"EMBEDDED_PROFILE_NAME" "embedded.mobileprovision"
+               "CODESIGN_ALLOCATE" codesign-alloc}]
+      (prn entitlements)
+      (system/exec ["codesign" "-f" "-s" identity "--entitlements" entitlements (.getAbsolutePath app-dir)] env))
+
+    (.delete (io/file ipa))
+    (system/exec ["zip" "-qr" ipa "Payload"] package-dir {})
+    #_(system/exec ["zip" "-qr" ipa "Defold.app"] payload-dir {})
+    (prn "!!!" app-dir)
+
+    app-dir))
+
+
+(prn (extract-entitlement "/Users/chmu/tmp/embedded.mobileprovision"))
+
+(let [unpack (System/getProperty "defold.unpack.path")
+      engine-armv7 (format "%s/armv7-ios/bin/dmengine" unpack)
+      engine-arm64 (format "%s/arm64-ios/bin/dmengine" unpack)
+      lipo (format "%s/bin/lipo" unpack)
+      engine (File/createTempFile "dmengine" "")]
+  (system/exec [lipo "-create" engine-armv7 engine-arm64 "-output" (.getAbsolutePath engine)] {})
+  (prn (sign-ios-app2
+        "/tmp/test.ipa"
+        engine
+        "B42E688DEA1522C70B465E137AA8ACE58AFF692C"
+        "/Users/chmu/tmp/embedded.mobileprovision"
+        {"CFBundleIdentifier" "chmu.test-sign"
+         "CFBundleExecutable" "dmengine"})))
+
 
 (defn- sign-ios-app [project identity profile]
   (let [settings (g/node-value project :settings)
