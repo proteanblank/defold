@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include <time.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -20,6 +21,7 @@
 #include <dlib/http_cache.h>
 #include <dlib/http_cache_verify.h>
 #include <dlib/math.h>
+#include <dlib/memory.h>
 #include <dlib/uri.h>
 #include <dlib/path.h>
 #include <dlib/profile.h>
@@ -65,7 +67,7 @@ struct Manifest
         memset(this, 0, sizeof(Manifest));
     }
 
-    dmResourceArchive::HArchiveIndex    m_ArchiveIndex;
+    dmResourceArchive::HArchiveIndexContainer    m_ArchiveIndex;
     dmLiveUpdateDDF::ManifestFile*      m_DDF;
 };
 
@@ -234,11 +236,27 @@ static void HttpContent(dmHttpClient::HResponse, void* user_data, int status_cod
 
 Result LoadManifest(const char* path, const char* location, HFactory factory)
 {
-    // Read from file
-    dmDDF::Result ddf_res = dmDDF::LoadMessageFromFile(path, dmLiveUpdateDDF::ManifestFile::m_DDFDescriptor, (void**)(&factory->m_Manifest->m_DDF));
+    dmLogInfo("Loading teh manifest! path: %s, strlen(path): %lu", path, strlen(path));
+
+    uint32_t manifest_file_size = 0;
+    uint32_t dummy_file_size = 0;
+    dmSys::ResourceSize(path, &manifest_file_size);
+    uint8_t* manifest_file_data = 0x0;
+    assert(dmMemory::RESULT_OK == dmMemory::AlignedMalloc((void**)&manifest_file_data, 16, manifest_file_size));
+    dmSys::Result res = dmSys::LoadResource(path, manifest_file_data, manifest_file_size, &dummy_file_size);
+
+    if (res != dmSys::RESULT_OK)
+    {
+        dmLogError("Failed to load manifest resource, result = %i", res);
+        return RESULT_IO_ERROR;
+    }
+
+    // Read from manifest resource
+    dmDDF::Result ddf_res = dmDDF::LoadMessage(manifest_file_data, manifest_file_size, dmLiveUpdateDDF::ManifestFile::m_DDFDescriptor, (void**)(&factory->m_Manifest->m_DDF));
+    dmMemory::AlignedFree(manifest_file_data);
     if (ddf_res != dmDDF::RESULT_OK)
     {
-        dmLogError("Failed to load manifest file, result = %i", ddf_res);
+        dmLogError("Failed to load manifest message, result = %i", ddf_res);
         return RESULT_IO_ERROR;
     }
 
@@ -260,8 +278,19 @@ Result LoadManifest(const char* path, const char* location, HFactory factory)
 
     // Construct path to archive index file. Assumes same path as manifest file.
     char archiveIndexPath[DMPATH_MAX_PATH];
-    dmStrlCpy(archiveIndexPath, path, strlen(path) - 14); // game.dmanifest is 14 characters
-    dmStrlCat(archiveIndexPath, "/game.arci", sizeof(archiveIndexPath));
+    memset(&archiveIndexPath[0], '\0', DMPATH_MAX_PATH);
+    uint32_t manifest_str_len = 14; // 'game.dmanifest' is 14 characters
+    if (strlen(path) > manifest_str_len)
+    {
+        dmStrlCpy(archiveIndexPath, path, strlen(path) - manifest_str_len);
+        dmStrlCat(archiveIndexPath, "/game.arci", DMPATH_MAX_PATH);
+    }
+    else
+    {
+        dmStrlCat(archiveIndexPath, "game.arci", DMPATH_MAX_PATH);
+    }
+
+    dmLogInfo("Constructed archive index file path: %s THE END", archiveIndexPath);
 
     Result r = MountArchiveInternal(archiveIndexPath, &factory->m_Manifest->m_ArchiveIndex, &factory->m_ArchiveMountInfo2);
     if (r != RESULT_OK)
@@ -370,6 +399,8 @@ HFactory NewFactory(NewFactoryParams* params, const char* uri)
     {
         factory->m_Manifest = new Manifest();
         factory->m_Manifest->m_DDF = new dmLiveUpdateDDF::ManifestFile();
+
+        //dmLogInfo("path: %s, location: %s", factory->m_UriParts.m_Path, factory->m_UriParts.m_Location);
 
         Result r = LoadManifest(factory->m_UriParts.m_Path, factory->m_UriParts.m_Location, factory);
         if (r != RESULT_OK)
@@ -535,6 +566,7 @@ Result RegisterType(HFactory factory,
 Result LoadFromManifest(HFactory factory, const Manifest* manifest, const char* path, uint32_t* resource_size, LoadBufferType* buffer)
 {
     // Get resource hash from path_hash
+    dmLogInfo("Loading from manifest! path: %s", path);
     uint32_t entry_count = manifest->m_DDF->m_Data.m_Resources.m_Count;
     dmLiveUpdateDDF::ResourceEntry* entries = manifest->m_DDF->m_Data.m_Resources.m_Data;
     for (int i = 0; i < entry_count; ++i)
