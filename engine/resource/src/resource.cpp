@@ -236,7 +236,7 @@ static void HttpContent(dmHttpClient::HResponse, void* user_data, int status_cod
 
 Result LoadManifest(const char* path, const char* location, HFactory factory)
 {
-    dmLogInfo("Loading teh manifest! path: %s, strlen(path): %lu", path, strlen(path));
+    dmLogInfo("Loading the manifest! path: %s, strlen(path): %lu", path, strlen(path));
 
     uint32_t manifest_file_size = 0;
     uint32_t dummy_file_size = 0;
@@ -259,8 +259,6 @@ Result LoadManifest(const char* path, const char* location, HFactory factory)
         dmLogError("Failed to load manifest message, result = %i", ddf_res);
         return RESULT_IO_ERROR;
     }
-
-    // TODO VALIDATE MAGIC NUMBER
 
     // Validate file version
     dmLiveUpdateDDF::ManifestHeader header = factory->m_Manifest->m_DDF->m_Data.m_Header;
@@ -444,14 +442,14 @@ HFactory NewFactory(NewFactoryParams* params, const char* uri)
         factory->m_ResourceReloadedCallbacks = 0;
     }
 
-    if (params->m_BuiltinsArchive)
-    {
-        dmResourceArchive::WrapArchiveBuffer(params->m_BuiltinsArchive, params->m_BuiltinsArchiveSize, &factory->m_BuiltinsArchive);
-    }
-    else
-    {
+    // if (params->m_BuiltinsArchive)
+    // {
+    //     dmResourceArchive::WrapArchiveBuffer(params->m_BuiltinsArchive, params->m_BuiltinsArchiveSize, &factory->m_BuiltinsArchive);
+    // }
+    // else
+    // {
         factory->m_BuiltinsArchive = 0;
-    }
+    //}
 
     factory->m_LoadMutex = dmMutex::New();
     return factory;
@@ -569,14 +567,20 @@ Result LoadFromManifest(HFactory factory, const Manifest* manifest, const char* 
     dmLogInfo("Loading from manifest! path: %s", path);
     uint32_t entry_count = manifest->m_DDF->m_Data.m_Resources.m_Count;
     dmLiveUpdateDDF::ResourceEntry* entries = manifest->m_DDF->m_Data.m_Resources.m_Data;
-    for (int i = 0; i < entry_count; ++i)
+
+    uint32_t first = 0;
+    uint32_t last = entry_count-1;
+    uint64_t path_hash = dmHashString64(path);
+
+    while (first <= last)
     {
-        dmLiveUpdateDDF::ResourceEntry& e = entries[i];
-        // TODO string comp? Use path hash to compare instead?
-        if (strcmp(e.m_Url, path) == 0) // match
+        int mid = first + (last - first) / 2;
+        uint64_t h = entries[mid].m_UrlHash;
+
+        if (h == path_hash)
         {
             dmResourceArchive::EntryData ed;
-            dmResourceArchive::Result res = dmResourceArchive::FindEntry2(manifest->m_ArchiveIndex, e.m_Hash.m_Data.m_Data, &ed);
+            dmResourceArchive::Result res = dmResourceArchive::FindEntry2(manifest->m_ArchiveIndex, entries[mid].m_Hash.m_Data.m_Data, &ed);
             if (res == dmResourceArchive::RESULT_OK)
             {
                 uint32_t file_size = ed.m_ResourceSize; // TODO compressed size?
@@ -594,12 +598,21 @@ Result LoadFromManifest(HFactory factory, const Manifest* manifest, const char* 
             }
             else if (res == dmResourceArchive::RESULT_NOT_FOUND)
             {
+                // Resource was found in manifest, but not in archive
                 return RESULT_RESOURCE_NOT_FOUND;
             }
             else
             {
                 return RESULT_IO_ERROR;
             }
+        }
+        else if (h > path_hash)
+        {
+            last = mid-1;
+        }
+        else if (h < path_hash)
+        {
+            first = mid+1;
         }
     }
 
@@ -640,13 +653,13 @@ Result DoLoadResourceLocked(HFactory factory, const char* path, const char* orig
 {
     DM_PROFILE(Resource, "LoadResource");
 
-    if (factory->m_BuiltinsArchive)
-    {
-        if (LoadFromArchive(factory, factory->m_BuiltinsArchive, path, original_name, resource_size, buffer) == RESULT_OK)
-        {
-            return RESULT_OK;
-        }
-    }
+    // if (factory->m_BuiltinsArchive)
+    // {
+    //     if (LoadFromArchive(factory, factory->m_BuiltinsArchive, path, original_name, resource_size, buffer) == RESULT_OK)
+    //     {
+    //         return RESULT_OK;
+    //     }
+    // }
 
     // NOTE: No else if here. Fall through
     if (factory->m_HttpClient)
@@ -699,17 +712,8 @@ Result DoLoadResourceLocked(HFactory factory, const char* path, const char* orig
     }*/
     else if (factory->m_Manifest)
     {
-
-
-
-        // LOOKUP RESOURCE VIA MANIFEST!
-        //uint64_t path_hash = dmHashBuffer64(path, strlen(path)); // Is this the complete path incl. filename?
         Result r = LoadFromManifest(factory, factory->m_Manifest, original_name, resource_size, buffer);
-
         return r;
-
-
-
     }
     else
     {
