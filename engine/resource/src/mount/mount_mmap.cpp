@@ -28,7 +28,6 @@ namespace dmResource
 
     Result MapFile(const char* path, void*& out_map, uint32_t& out_size)
     {
-        dmLogInfo("mount_mmap - trying to open file at path: %s", path);
         int fd = open(path, O_RDONLY);
         if (fd < 0)
         {
