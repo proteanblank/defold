@@ -333,6 +333,7 @@ bail:
             {
                 fclose(archive->m_FileResourceData);
             }
+            delete archive->m_ArchiveIndex;
             delete archive;
         }
     }

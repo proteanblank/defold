@@ -248,6 +248,7 @@ Result LoadManifest(const char* path, const char* location, HFactory factory)
     if (res != dmSys::RESULT_OK)
     {
         dmLogError("Failed to load manifest resource, result = %i", res);
+        dmMemory::AlignedFree(manifest_file_data);
         return RESULT_IO_ERROR;
     }
 
@@ -479,11 +480,16 @@ void DeleteFactory(HFactory factory)
     }
     if (factory->m_Manifest)
     {
+        
         if (factory->m_Manifest->m_DDF)
         {
-            delete factory->m_Manifest->m_DDF;
+            dmDDF::FreeMessage(factory->m_Manifest->m_DDF);
         }
 
+        if (factory->m_Manifest->m_ArchiveIndex)
+        {
+            UnmountArchiveInternal(factory->m_Manifest->m_ArchiveIndex, factory->m_ArchiveMountInfo2);
+        }
         delete factory->m_Manifest;
     }
     delete factory->m_Resources;
@@ -583,7 +589,7 @@ Result LoadFromManifest(HFactory factory, const Manifest* manifest, const char* 
             dmResourceArchive::Result res = dmResourceArchive::FindEntry2(manifest->m_ArchiveIndex, entries[mid].m_Hash.m_Data.m_Data, &ed);
             if (res == dmResourceArchive::RESULT_OK)
             {
-                uint32_t file_size = ed.m_ResourceSize; // TODO compressed size?
+                uint32_t file_size = ed.m_ResourceSize;
                 if (buffer->Capacity() < file_size)
                 {
                     buffer->SetCapacity(file_size);
@@ -801,7 +807,6 @@ static Result DoGet(HFactory factory, const char* name, void** resource)
         return RESULT_OUT_OF_RESOURCES;
     }
 
-    // TODO this should go via manifest!
     // Resource not loaded previously, try and load the resource from archive
     const char* ext = strrchr(name, '.');
     if (ext)
