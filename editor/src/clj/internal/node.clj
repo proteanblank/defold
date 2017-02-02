@@ -14,7 +14,8 @@
   (:import [internal.graph.types IBasis]
            [internal.graph.error_values ErrorValue]
            [clojure.lang Named]
-           [schema.core Maybe Either]))
+           [schema.core Maybe Either]
+           [java.lang.ref SoftReference WeakReference]))
 
 ;; TODO - replace use of 'transform' as a variable name with 'label'
 
@@ -800,7 +801,7 @@
     desc))
 
 (def ^:private output-flags   #{:cached :abstract})
-(def ^:private output-options #{})
+(def ^:private output-options #{:cache-type})
 
 (defmethod process-as 'output [[_ label & forms]]
   (assert-symbol "output" label)
@@ -1290,15 +1291,22 @@
 
 (defn check-caches [ctx-name nodeid-sym description transform local-cache-sym forms]
   (if (get-in description [:output transform :flags :cached])
-    `(let [~local-cache-sym (:local ~ctx-name)
-           local#  (deref ~local-cache-sym)
-           global# (:snapshot ~ctx-name)
-           key# [~nodeid-sym ~transform]]
-       (cond
-         (contains? local# key#) (get local# key#)
-         (contains? global# key#) (if-some [cached# (get global# key#)]
-                                           (do (swap! (:hits ~ctx-name) conj key#) cached#))
-         true ~forms))
+    (let [cache-type (get-in description [:output transform :options :cache-type] :default)
+          cache-entry-sym (gensym "cache-entry")
+          cache-val (case cache-type
+                      :soft `(.get ~(with-meta `(val ~cache-entry-sym) {:tag `SoftReference}))
+                      :default `(val ~cache-entry-sym))]
+      `(let [~local-cache-sym (:local ~ctx-name)
+             local#  (deref ~local-cache-sym)
+             global# (:snapshot ~ctx-name)
+             key# [~nodeid-sym ~transform]]
+         (if-let [~cache-entry-sym (find local# key#)]
+           ~cache-val
+           (if-let [~cache-entry-sym (find global# key#)]
+             (when (some? (val ~cache-entry-sym))
+               (swap! (:hits ~ctx-name) conj key#)
+               ~cache-val)
+             ~forms))))
     forms))
 
 (defn gather-inputs [input-sym schema-sym self-name ctx-name nodeid-sym description transform production-function forms]
@@ -1323,9 +1331,12 @@
 
 (defn cache-output [ctx-name description transform nodeid-sym output-sym local-cache-sym forms]
   (if (contains? (get-in description [:output transform :flags]) :cached)
-    `(do
-       (swap! ~local-cache-sym assoc [~nodeid-sym ~transform] ~output-sym)
-       ~forms)
+    (let [cache-type (get-in description [:output transform :options :cache-type] :default)]
+      `(let [val# ~(case cache-type
+                     :soft `(SoftReference. ~output-sym)
+                     :default output-sym)]
+         (swap! ~local-cache-sym assoc [~nodeid-sym ~transform] val#)
+         ~forms))
     forms))
 
 (defn deduce-output-type
