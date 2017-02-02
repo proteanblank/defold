@@ -1289,13 +1289,24 @@
   `(let [~ctx-name (in-production ~ctx-name ~(:name description) ~nodeid-sym ~transform)]
      ~forms))
 
+;;
+
+(defmulti cache-wrap (fn [cache-type val-form] cache-type))
+(defmethod cache-wrap :weak [_ val-form] `(WeakReference. ~val-form))
+(defmethod cache-wrap :soft [_ val-form] `(SoftReference. ~val-form))
+(defmethod cache-wrap :default [_ val-form] val-form)
+
+(defmulti cache-deref (fn [cache-type val-form] cache-type))
+(defmethod cache-deref :weak [_ val-form] `(.get ~(with-meta val-form {:tag `WeakReference})))
+(defmethod cache-deref :soft [_ val-form] `(.get ~(with-meta val-form {:tag `SoftReference})))
+(defmethod cache-deref :default [_ val-form] val-form)
+
+
 (defn check-caches [ctx-name nodeid-sym description transform local-cache-sym forms]
   (if (get-in description [:output transform :flags :cached])
     (let [cache-type (get-in description [:output transform :options :cache-type] :default)
           cache-entry-sym (gensym "cache-entry")
-          cache-val (case cache-type
-                      :soft `(.get ~(with-meta `(val ~cache-entry-sym) {:tag `SoftReference}))
-                      :default `(val ~cache-entry-sym))]
+          cache-val (cache-deref cache-type `(val ~cache-entry-sym))]
       `(let [~local-cache-sym (:local ~ctx-name)
              local#  (deref ~local-cache-sym)
              global# (:snapshot ~ctx-name)
@@ -1332,10 +1343,8 @@
 (defn cache-output [ctx-name description transform nodeid-sym output-sym local-cache-sym forms]
   (if (contains? (get-in description [:output transform :flags]) :cached)
     (let [cache-type (get-in description [:output transform :options :cache-type] :default)]
-      `(let [val# ~(case cache-type
-                     :soft `(SoftReference. ~output-sym)
-                     :default output-sym)]
-         (swap! ~local-cache-sym assoc [~nodeid-sym ~transform] val#)
+      `(do
+         (swap! ~local-cache-sym assoc [~nodeid-sym ~transform] ~(cache-wrap cache-type output-sym))
          ~forms))
     forms))
 
