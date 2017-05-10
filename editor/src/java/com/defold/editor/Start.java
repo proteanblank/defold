@@ -1,86 +1,51 @@
 package com.defold.editor;
 
-import java.io.File;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.Callable;
-import java.util.concurrent.FutureTask;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
+import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+import ch.qos.logback.core.rolling.RollingFileAppender;
+import ch.qos.logback.core.rolling.TimeBasedRollingPolicy;
+import ch.qos.logback.core.util.FileSize;
+import clojure.java.api.Clojure;
+import clojure.lang.IFn;
+import com.defold.editor.Updater.PendingUpdate;
+import com.defold.libs.ResourceUnpacker;
+import javafx.application.Application;
+import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
-import ch.qos.logback.core.FileAppender;
-import ch.qos.logback.core.rolling.*;
-import ch.qos.logback.core.util.FileSize;
-
-import com.defold.editor.Updater.PendingUpdate;
-import com.defold.libs.ResourceUnpacker;
-import com.defold.util.SupportPath;
-
-import javafx.application.Application;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.stage.Stage;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 public class Start extends Application {
 
     private static Logger logger = LoggerFactory.getLogger(Start.class);
 
-    static ArrayList<URL> extractURLs(String classPath) {
-        ArrayList<URL> urls = new ArrayList<>();
-        for (String s : classPath.split(File.pathSeparator)) {
-            String suffix = "";
-            if (!s.endsWith(".jar")) {
-                suffix = "/";
-            }
-            URL url;
-            try {
-                url = new URL(String.format("file:%s%s", s, suffix));
-            } catch (MalformedURLException e) {
-                throw new RuntimeException(e);
-            }
-            urls.add(url);
-        }
-        return urls;
+    private static Start instance;
+
+    public static Start getInstance() {
+        return instance;
     }
 
     public PendingUpdate getPendingUpdate() {
         return this.pendingUpdate.get();
     }
 
-    private LinkedBlockingQueue<Object> pool;
-    private ThreadPoolExecutor threadPool;
     private AtomicReference<PendingUpdate> pendingUpdate;
     private Timer updateTimer;
     private Updater updater;
-    private static boolean createdFromMain = false;
     private final int firstUpdateDelay = 1000;
     private final int updateDelay = 60000;
 
     public Start() throws IOException {
-        pool = new LinkedBlockingQueue<>(1);
-        threadPool = new ThreadPoolExecutor(1, 1, 3000, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>());
-        threadPool.allowCoreThreadTimeOut(true);
         pendingUpdate = new AtomicReference<>();
-
         installUpdater();
     }
 
@@ -121,105 +86,80 @@ public class Start extends Application {
         };
     }
 
-    private ClassLoader makeClassLoader() {
-        ArrayList<URL> urls = extractURLs(System.getProperty("java.class.path"));
-        // The "boot class-loader", i.e. for java.*, sun.*, etc
-        ClassLoader parent = ClassLoader.getSystemClassLoader();
-        // Per instance class-loader
-        ClassLoader classLoader = new URLClassLoader(urls.toArray(new URL[urls.size()]), parent);
-        return classLoader;
-    }
-
-    private Object makeEditor() throws Exception {
-        ClassLoader classLoader = makeClassLoader();
-
-        // NOTE: Is context classloader required?
-        // Thread.currentThread().setContextClassLoader(classLoader);
-
-        Class<?> editorApplicationClass = classLoader.loadClass("com.defold.editor.EditorApplication");
-        Object editorApplication = editorApplicationClass.getConstructor(new Class[] { Object.class, ClassLoader.class }).newInstance(this, classLoader);
-        return editorApplication;
-    }
-
-    private void poolEditor(long delay) {
-        FutureTask<Object> future = new FutureTask<>(new Callable<Object>() {
-
-            @Override
-            public Object call() throws Exception {
-                // Arbitrary sleep in order to reduce the CPU load while loading the project
-                Thread.sleep(delay);
-                Object editorApplication = makeEditor();
-                pool.add(editorApplication);
-                return null;
-            }
-
-        });
-        threadPool.submit(future);
-    }
-
-    public void openEditor(String[] args) throws Exception {
-        if (!createdFromMain) {
-            throw new RuntimeException(String.format("Multiple %s classes. ClassLoader errors?", this.getClass().getName()));
+    private void initializeNativeLibraries() {
+        try {
+            // A terrible hack as an attempt to avoid a deadlock when loading native libraries
+            // Prism might be loading native libraries at this point, although we kick this loading after the splash has been shown.
+            // The current hypothesis is that the splash is "onShown" before the loading has finished and rendering can start.
+            // Occular inspection shows the splash as grey for a few frames (1-3?) before filled in with graphics. That grey-time also seems to differ between runs.
+            // This is an attempt to make the deadlock less likely to happen and hopefully avoid it altogether. No guarantees.
+            Thread.sleep(200);
+            ResourceUnpacker.unpackResources();
+            ClassLoader parent = ClassLoader.getSystemClassLoader();
+            Class<?> glprofile = parent.loadClass("com.jogamp.opengl.GLProfile");
+            Method init = glprofile.getMethod("initSingleton");
+            init.invoke(null);
+        } catch (Throwable t) {
+            logger.error("failed to extract native libs", t);
+            // NOTE: Really swallow this one? why not System.exit(1);
         }
-        poolEditor(3000);
-        Object editorApplication = pool.take();
-        Method run = editorApplication.getClass().getMethod("run", new Class[]{ String[].class });
-        run.invoke(editorApplication, new Object[] { args });
     }
 
-    private void kickLoading(Splash splash) {
-        threadPool.submit(() -> {
-            try {
-                // A terrible hack as an attempt to avoid a deadlock when loading native libraries
-                // Prism might be loading native libraries at this point, although we kick this loading after the splash has been shown.
-                // The current hypothesis is that the splash is "onShown" before the loading has finished and rendering can start.
-                // Occular inspection shows the splash as grey for a few frames (1-3?) before filled in with graphics. That grey-time also seems to differ between runs.
-                // This is an attempt to make the deadlock less likely to happen and hopefully avoid it altogether. No guarantees.
-                Thread.sleep(200);
-                ResourceUnpacker.unpackResources();
-                ClassLoader parent = ClassLoader.getSystemClassLoader();
-                Class<?> glprofile = parent.loadClass("com.jogamp.opengl.GLProfile");
-                Method init = glprofile.getMethod("initSingleton");
-                init.invoke(null);
-            } catch (Throwable t) {
-                logger.error("failed to extract native libs", t);
+    private void startEditor(Splash splash) {
+        initializeNativeLibraries();
+
+        try {
+            IFn require = Clojure.var("clojure.core", "require");
+
+            if (Editor.isDev()) {
+                logger.debug("Starting nrepl");
+                require.invoke(Clojure.read("editor.debug"));
+                Clojure.var("editor.debug", "start-server").invoke();
+                logger.debug("nrepl started");
             }
-            try {
-                pool.add(makeEditor());
-                javafx.application.Platform.runLater(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            List<String> params = getParameters().getRaw();
-                            openEditor(params.toArray(new String[params.size()]));
-                            splash.close();
-                        } catch (Throwable t) {
-                            t.printStackTrace();
-                        }
-                    }
-                });
-            } catch (Throwable t) {
-                t.printStackTrace();
-                String message = (t instanceof InvocationTargetException) ? t.getCause().getMessage() : t.getMessage();
-                javafx.application.Platform.runLater(() -> {
-                    splash.setLaunchError(message);
-                    splash.setErrorShowing(true);
-                });
-            }
-            return null;
-        });
+
+            logger.debug("Requiring editor.boot");
+            require.invoke(Clojure.read("editor.boot"));
+            logger.debug("Required editor.boot");
+
+            // fix this
+            List<String> params = getParameters().getRaw();
+            String[] paramsArray = params.toArray(new String[params.size()]);
+
+            javafx.application.Platform.runLater(() -> {
+                try {
+                    logger.debug("Calling editor.boot/main");
+                    IFn main = Clojure.var("editor.boot", "main");
+
+                    splash.close();
+                    main.invoke(paramsArray);
+                } catch (Throwable t) {
+                    logger.error("unable to call editor.boot/main", t);
+                }
+            });
+
+        } catch (Throwable t) {
+            t.printStackTrace();
+            String message = (t instanceof InvocationTargetException) ? t.getCause().getMessage() : t.getMessage();
+            javafx.application.Platform.runLater(() -> {
+                splash.setLaunchError(message);
+                splash.setErrorShowing(true);
+            });
+        }
     }
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+        instance = this;
+
         final Splash splash = new Splash();
-        splash.shownProperty().addListener(new ChangeListener<Boolean>() {
-            @Override
-            public void changed(ObservableValue<? extends Boolean> observable,
-                    Boolean oldValue, Boolean newValue) {
-                if (newValue.booleanValue()) {
-                    kickLoading(splash);
-                }
+        splash.shownProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue.booleanValue()) {
+                Thread loadingThread = new Thread(() -> {
+                    startEditor(splash);
+                });
+                loadingThread.setName("defold-loader");
+                loadingThread.start();
             }
         });
         splash.show();
@@ -233,7 +173,6 @@ public class Start extends Application {
     }
 
     public static void main(String[] args) throws Exception {
-        createdFromMain = true;
         initializeLogging();
         Start.launch(args);
     }

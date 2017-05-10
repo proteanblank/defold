@@ -3,7 +3,7 @@
             [editor.ui :as ui]
             [editor.workspace :as workspace]
             [service.log :as log])
-  (:import [com.defold.editor EditorApplication Updater$PendingUpdate]
+  (:import [com.defold.editor Start Updater$PendingUpdate]
            [java.io IOException]
            [javafx.animation AnimationTimer]
            [javafx.scene Scene Parent]
@@ -53,8 +53,9 @@
 
 (defn install-pending-update-check!
   [^Stage stage project]
-  (let [tick-fn (fn [^AnimationTimer timer _dt]
-                  (when-let [pending-update (EditorApplication/getPendingUpdate)]
+  (let [start (Start/getInstance)
+        tick-fn (fn [^AnimationTimer timer _dt]
+                  (when-let [pending-update (.getPendingUpdate start)]
                     (.stop timer)
                     (ui/run-later
                       (ask-update-and-restart! stage pending-update project))))

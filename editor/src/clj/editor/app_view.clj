@@ -7,6 +7,7 @@
             [editor.changes-view :as changes-view]
             [editor.console :as console]
             [editor.dialogs :as dialogs]
+            [editor.editor :as editor]
             [editor.engine :as engine]
             [editor.handler :as handler]
             [editor.jfx :as jfx]
@@ -20,6 +21,7 @@
             [editor.prefs-dialog :as prefs-dialog]
             [editor.progress :as progress]
             [editor.ui :as ui]
+            [editor.ui.open-project :as open-project]
             [editor.workspace :as workspace]
             [editor.resource :as resource]
             [editor.graph-util :as gu]
@@ -34,7 +36,6 @@
             [util.profiler :as profiler]
             [util.http-server :as http-server])
   (:import [com.defold.control TabPaneBehavior]
-           [com.defold.editor EditorApplication]
            [com.defold.editor Start]
            [java.net URI]
            [java.util Collection]
@@ -206,8 +207,9 @@
         (.setDividerPositions sp (into-array Double/TYPE pos))))))
 
 (handler/defhandler :open-project :global
-  (run [] (when-let [file-name (ui/choose-file "Open Project" "Project Files" ["*.project"])]
-            (EditorApplication/openEditor (into-array String [file-name])))))
+  (run [prefs]
+    (open-project/open-project prefs (fn [file-name]
+                                       (.start (Thread. #(editor/start file-name)))))))
 
 (handler/defhandler :logout :global
   (run [prefs] (login/logout prefs)))
@@ -360,7 +362,7 @@
                              {:label "Open"
                               :id ::open
                               :acc "Shortcut+O"
-                              :command :open}
+                              :command :open-project}
                              {:label "Save All"
                               :id ::save-all
                               :acc "Shortcut+S"

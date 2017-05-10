@@ -58,13 +58,15 @@
     repl-config))
 
 (defn start-server
-  [port]
-  (let [repl-config (cond-> {}
-                      true (maybe-load-cider)
-                      true (maybe-load-refactor-nrepl)
-                      port (assoc :port port))]
-    (send repl-server (constantly repl-config))
-    (send repl-server start-and-print)))
+  ([]
+   (start-server nil))
+  ([port]
+   (let [repl-config (cond-> {}
+                       true (maybe-load-cider)
+                       true (maybe-load-refactor-nrepl)
+                       port (assoc :port port))]
+     (send repl-server (constantly repl-config))
+     (send repl-server start-and-print))))
 
 (defn stop-server
   []

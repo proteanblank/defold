@@ -18,7 +18,6 @@
            [javafx.scene Parent Scene]
            [javafx.scene.control Button Label ListView ProgressBar TextArea TextField TreeItem TreeView]
            [javafx.scene.input KeyCode KeyEvent]
-           [javafx.scene.input KeyEvent]
            [javafx.scene.layout Region]
            [javafx.stage Stage StageStyle Modality DirectoryChooser]))
 

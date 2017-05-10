@@ -27,8 +27,6 @@
                       :exclusions [commons-logging/commons-logging]] ; commons-configuration -> 1.1.1, amazonica -> 1.2
                      [commons-codec/commons-codec                 "1.10"]
                      [org.clojure/data.json                       "0.2.6"]
-                     [org.projectodd.shimdandy/shimdandy-api      "1.2.0"]
-                     [org.projectodd.shimdandy/shimdandy-impl     "1.2.0"]
                      [potemkin                                    "0.4.3"]
                      [com.nanohttpd/nanohttpd                     "2.1.1"]
                      [com.sun.jersey/jersey-core                  "1.19"]
