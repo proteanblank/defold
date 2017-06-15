@@ -382,85 +382,112 @@
                               :command :save-all}
                              {:label :separator}
                              {:label "Open Assets..."
+                              :id ::open-assets
                               :acc "Shift+Shortcut+R"
                               :command :open-asset}
                              {:label "Search in Files"
+                              :id ::search-in-files
                               :acc "Shift+Shortcut+F"
                               :command :search-in-files}
                              {:label :separator}
                              {:label "Hot Reload"
+                              :id ::hot-reload
                               :acc "Shortcut+R"
                               :command :hot-reload}
                              {:label "Close"
+                              :id ::close
                               :acc "Shortcut+W"
                               :command :close}
                              {:label "Close All"
+                              :id ::close-all
                               :acc "Shift+Shortcut+W"
                               :command :close-all}
                              {:label "Close Others"
+                              :id ::close-others
                               :command :close-other}
                              {:label :separator}
                              {:label "Logout"
+                              :id ::logout
                               :command :logout}
                              {:label "Preferences..."
+                              :id ::preferences
                               :command :preferences
                               :acc "Shortcut+,"}
                              {:label "Quit"
+                              :id ::quit
                               :acc "Shortcut+Q"
                               :command :quit}]}
                  {:label "Edit"
                   :id ::edit
                   :children [{:label "Undo"
+                              :id ::undo
                               :acc "Shortcut+Z"
                               :icon "icons/undo.png"
                               :command :undo}
                              {:label "Redo"
+                              :id ::redo
                               :acc "Shift+Shortcut+Z"
                               :icon "icons/redo.png"
                               :command :redo}
                              {:label :separator}
                              {:label "Copy"
+                              :id ::copy
                               :acc "Shortcut+C"
                               :command :copy}
                              {:label "Cut"
+                              :id ::cut
                               :acc "Shortcut+X"
                               :command :cut}
                              {:label "Paste"
+                              :id ::paste
                               :acc "Shortcut+V"
                               :command :paste}
                              {:label "Delete"
+                              :id ::delete
                               :acc "Shortcut+BACKSPACE"
                               :icon_ "icons/redo.png"
                               :command :delete}
                              {:label :separator}
                              {:label "Move Up"
+                              :id ::move-up
                               :acc "Alt+UP"
                               :command :move-up}
                              {:label "Move Down"
+                              :id ::move-down
                               :acc "Alt+DOWN"
                               :command :move-down}
                              {:label :separator
                               :id ::edit-end}]}
                  {:label "Help"
+                  :id ::help
                   :children [{:label "Profiler"
+                              :id ::profiler
                               :children [{:label "Measure"
+                                          :id ::profiler-measure
                                           :command :profile
                                           :acc "Shortcut+Alt+X"}
                                          {:label "Measure and Show"
+                                          :id ::profiler-measure-and-show
                                           :command :profile-show
                                           :acc "Shift+Shortcut+Alt+X"}]}
                              {:label "Reload Stylesheet"
+                              :id ::reload-stylesheet
                               :acc "F5"
                               :command :reload-stylesheet}
                              {:label "Documentation"
+                              :id ::documentation
                               :command :documentation}
                              {:label "Report Issue"
+                              :id ::report-issue
                               :command :report-issue}
                              {:label "Report Praise"
+                              :id ::report-praise
                               :command :report-praise}
                              {:label "Show Logs"
+                              :id ::show-logs
                               :command :show-logs}
                              {:label "About"
+                              :id ::about
                               :command :about}]}])
 
 (ui/extend-menu ::tab-menu nil

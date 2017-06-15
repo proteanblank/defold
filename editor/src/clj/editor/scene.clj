@@ -645,16 +645,21 @@
                 [{:label "Scene"
                   :id ::scene
                   :children [{:label "Camera"
+                              :id ::camera
                               :children [{:label "Frame Selection"
+                                          :id ::frame-selection
                                           :acc "Shortcut+."
                                           :command :frame-selection}
                                          {:label "Realign"
+                                          :id ::realign
                                           :acc "Shortcut+,"
                                           :command :realign-camera}]}
                              {:label "Play"
+                              :id ::play
                               :acc "Shortcut+P"
                               :command :scene-play}
                              {:label "Stop"
+                              :id ::stop
                               :acc "Shortcut+T"
                               :command :scene-stop}
                              {:label :separator

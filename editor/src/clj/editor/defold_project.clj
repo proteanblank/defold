@@ -340,24 +340,32 @@
                 [{:label "Project"
                   :id ::project
                   :children (vec (remove nil? [{:label "Build"
+                                                :id ::build
                                                 :acc "Shortcut+B"
                                                 :command :build}
                                                {:label "Rebuild"
+                                                :id ::rebuild
                                                 :acc "Shortcut+Shift+B"
                                                 :command :rebuild}
                                                {:label "Build HTML5"
+                                                :id ::build-html5
                                                 :command :build-html5}
                                                {:label "Bundle"
+                                                :id ::bundle
                                                 :children (mapv (fn [[platform label]]
                                                                   {:label label
+                                                                   :id (keyword (str *ns*) (str "bundle-" platform))
                                                                    :command :bundle
                                                                    :user-data {:platform platform}})
                                                                 bundle-targets)}
                                                {:label "Fetch Libraries"
+                                                :id ::fetch-libraries
                                                 :command :fetch-libraries}
                                                {:label "Live Update Settings"
+                                                :id ::live-update-settings
                                                 :command :live-update-settings}
                                                {:label "Sign iOS App..."
+                                                :id ::sign-ios-app
                                                 :command :sign-ios-app}
                                                {:label :separator
                                                 :id ::project-end}]))}])

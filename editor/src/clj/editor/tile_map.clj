@@ -1066,9 +1066,11 @@
                 [{:label    "Tile Map"
                   :id       ::tile-map
                   :children [{:label   "Select Eraser"
+                              :id      ::select-eraser
                               :acc     "Shortcut+E"
                               :command :erase-tool}
                              {:label   "Show Palette"
+                              :id      ::show-palette
                               :acc     "Shortcut+Shift+T"
                               :command :tile-map-palette}]}])
 

@@ -269,7 +269,7 @@
                         :command   :target
                         :check     true
                         :user-data target})
-                 targets)))))
+                     targets)))))
 
 (defn- locate-device [ip]
   (when (not-empty ip)
@@ -306,9 +306,12 @@
 
 (ui/extend-menu ::menubar :editor.defold-project/project-end
                 [{:label "Target"
+                  :id ::target
                   :on-submenu-open update!
                   :command :target}
                  {:label "Enter Target IP"
+                  :id ::target-ip
                   :command :target-ip}
                  {:label "Target Discovery Log"
+                  :id ::target-log
                   :command :target-log}])
