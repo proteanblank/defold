@@ -44,6 +44,9 @@ namespace dmScript
     extern const char* META_TABLE_GET_USER_DATA;
     extern const char* META_TABLE_IS_VALID;
 
+    static char* g_PrinterBuffer = 0;
+    static int g_PrinterBufferSize = 0;
+
     /**
      * Create and return a new context.
      * @param config_file optional config file handle

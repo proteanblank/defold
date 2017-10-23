@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <dlib/log.h>
 
 #include "math.h"
 #include "pprint.h"
@@ -31,6 +32,14 @@ namespace dmPPrint
             }
             m_Cursor += n;
             m_StartLine = false;
+        }
+
+        int line_length = snprintf(NULL, 0, format, argp);
+        int buffer_left = m_BufferSize - m_Cursor;
+        if (line_length > buffer_left) {
+            dmLogError("Growing");
+            m_BufferSize += (line_length - buffer_left);
+            realloc(m_Buffer, m_BufferSize);
         }
 
         int c = m_BufferSize - m_Cursor;

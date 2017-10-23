@@ -384,8 +384,12 @@ namespace dmScript
     {
         int n = lua_gettop(L);
 
-        char buf[2048];
-        dmPPrint::Printer printer(buf, sizeof(buf));
+        if (!g_PrinterBuffer) {
+            g_PrinterBuffer = (char*)malloc(2048);
+            g_PrinterBufferSize = 2048;
+        }
+        //char buf[2048];
+        dmPPrint::Printer printer(g_PrinterBuffer, g_PrinterBufferSize);
         if (lua_type(L, 1) == LUA_TTABLE) {
             printer.Printf("\n");
             DoLuaPPrintTable(L, 1, &printer, 0);
@@ -400,7 +404,7 @@ namespace dmScript
             lua_pop(L, 1);
         }
 
-        dmLogUserDebug("%s", buf);
+        dmLogUserDebug("%s", g_PrinterBuffer);
         assert(n == lua_gettop(L));
         return 0;
     }
