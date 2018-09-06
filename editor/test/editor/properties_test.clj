@@ -208,7 +208,7 @@
 
 (g/defnode DynamicSetFn
   (property a g/Num)
-  (property count g/Any (default (atom 0)))
+  (property count g/Any)
 
   (output _properties g/Properties (g/fnk [_declared-properties]
                                           (assoc-in _declared-properties [:properties :a :edit-type :set-fn]
@@ -220,7 +220,7 @@
   (with-clean-system
     (let [n (first
               (tx-nodes
-                (g/make-nodes world [n DynamicSetFn])))
+                (g/make-nodes world [n [DynamicSetFn :count (atom 0)]])))
           p (:a (coalesce-nodes [n]))]
       (is (= 0 @(g/node-value n :count)))
       (properties/set-values! p [1])

@@ -287,7 +287,7 @@
                                                        :when (contains? outputs from)]
                                                    (g/connect or-node from self to)))
                                                (for [[from to] [[:build-targets :source-build-targets]]]
-                                                 (g/connect go-node from self to))
+                                                 (g/connect go-node from self to))  ;; <---- shouldn't this be or-node???
                                                (for [[from to] [[:url :base-url]]]
                                                  (g/connect self from or-node to))
                                                (for [[id p] component-overrides

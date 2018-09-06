@@ -151,7 +151,10 @@
   [ctx node-id input-label]
   (if-let [nodes-affected (get-in ctx [:nodes-affected node-id] #{})]
     (let [basis (:basis ctx)
-          dirty-deps (-> (gt/node-by-id-at basis node-id) (gt/node-type basis) in/input-dependencies (get input-label))]
+          dirty-deps (-> (gt/node-by-id-at basis node-id)
+                         (gt/node-type basis)
+                         in/input-dependencies
+                         (get input-label))]
       (update ctx :nodes-affected assoc node-id (reduce conj nodes-affected dirty-deps)))
     ctx))
 
@@ -355,6 +358,8 @@
 (declare ctx-add-node)
 
 (defn- ctx-make-override-nodes [ctx override-id node-ids]
+  ;; this could probably benefit from a original->override-node map in the override structure so we dont need to
+  ;; look up all overrides for the node and check if any of them are for the correct override...
   (reduce (fn [ctx node-id]
             (let [basis (:basis ctx)]
               (if (some #(= override-id (node-id->override-id basis %)) (ig/get-overrides basis node-id))

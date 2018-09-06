@@ -159,7 +159,8 @@
                                                                    (g/connect sub :_node-id main :sub-nodes))))]
       (let [sub-nodes (g/node-value or-main :sub-nodes)]
         (is (= 1 (count sub-nodes)))
-        (is (not= [sub] sub-nodes)))
+        (is (not= [sub] sub-nodes))
+        (is (= sub (g/override-original (first sub-nodes)))))
       (g/transact (g/disconnect sub :_node-id main :sub-nodes))
       (is (empty? (g/node-value or-main :sub-nodes))))))
 
@@ -794,9 +795,9 @@
           mains (mapv first all)
           subs (mapv second all)]
       (testing "value fnk"
-               (is (every? (deps [[main-0 :a-property]]) (outs mains :virt-property))))
+        (is (every? (deps [[main-0 :a-property]]) (outs mains :virt-property))))
       (testing "output"
-             (is (every? (deps [[main-0 :a-property]]) (outs mains :cached-output))))
+        (is (every? (deps [[main-0 :a-property]]) (outs mains :cached-output))))
       (testing "connections"
               (is (every? conn? (for [[m s] all]
                                   [s :_node-id m :sub-nodes])))
@@ -812,22 +813,22 @@
                                                   (g/connect src :a-property tgt :in-value)
                                                   (g/override src)))]
       (testing "regular dep"
-               (is (every? (deps [[src :a-property]]) [[tgt :out-value]])))
+        (is (every? (deps [[src :a-property]]) [[tgt :out-value]])))
       (testing "no override deps"
-               (is (not-any? (deps [[src-1 :a-property]]) [[tgt :out-value]])))
+        (is (not-any? (deps [[src-1 :a-property]]) [[tgt :out-value]])))
       (testing "connections"
-              (is (conn? [src :a-property tgt :in-value]))
-              (is (no-conn? [src-1 :a-property tgt :in-value])))))
+        (is (conn? [src :a-property tgt :in-value]))
+        (is (no-conn? [src-1 :a-property tgt :in-value])))))
   (with-clean-system
     (let [[src tgt tgt-1] (tx-nodes (g/make-nodes world [src [MainNode :a-property "reload-test"]
                                                          tgt TargetNode]
                                                   (g/connect src :a-property tgt :in-value)
                                                   (g/override tgt)))]
       (testing "regular dep"
-               (is (every? (deps [[src :a-property]]) [[tgt :out-value] [tgt-1 :out-value]])))
+        (is (every? (deps [[src :a-property]]) [[tgt :out-value] [tgt-1 :out-value]])))
       (testing "connections"
-               (is (conn? [src :a-property tgt :in-value]))
-               (is (conn? [src :a-property tgt-1 :in-value])))))
+        (is (conn? [src :a-property tgt :in-value]))
+        (is (conn? [src :a-property tgt-1 :in-value])))))
   (with-clean-system
     (let [[sub-scene] (make-scene! world "sub-scene" [[VisualNode {:id "my-node" :value ""}]])
           [scene] (make-scene! world "scene" [[Template {:id "template" :template {:path "sub-scene" :overrides {}}}]
