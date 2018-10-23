@@ -3026,11 +3026,11 @@
       (println (g/node-value layout-node :name) layout-node "node-tree" (ffirst (g/sources-of layout-node :node-msgs))))
     (println :default "node-tree" (g/node-value gsn :node-tree))))
 
-(def override-name {72057594037927940 :CTN
-                    72057594037927941 :CL
-                    72057594037927959 :PTN
-                    72057594037927960 :PL
-                    72057594037927938 :GL})
+(def override-name {72057594037927940 :child-template-node #_:CTN
+                    72057594037927941 :child-landscape #_:CL
+                    72057594037927959 :parent-template-node #_:PTN
+                    72057594037927960 :parent-landscape #_:PL
+                    72057594037927938 :grandchild-landscape #_:GL})
 
 (defn- original-overrides [n]
   (map (comp #(get override-name % %) g/override-id) (g/override-originals n)))
@@ -3061,6 +3061,51 @@
       (assoc :path (resource/resource->proj-path (g/node-value n :resource)))
       (assoc :children [(gui-tree (g/node-value n :node-tree))])
       (assoc :layouts (map gui-tree (map first (g/sources-of n :layout-msgs)))))))
+
+(defn- children-and-layouts [node]
+  (let [children (:children node)]
+    (concat (when (not= children :skipped) children)
+            (:layouts node))))
+              
+
+
+(defn gui-tree->dot [gui-tree]
+  (let [nodes (tree-seq children-and-layouts children-and-layouts gui-tree)
+        node-infos (distinct (map #(select-keys [:node-id :type :id :path :original-overrides] %) nodes))
+        sub-connections (distinct (mapcat (fn [node] (map (partial vector (:node-id node)) (map :node-id (children-and-layouts node)))) nodes))
+        override-connections (distinct (mapcat (fn [node] (map (partial vector (:node-id node)) (disj (set (g/override-originals (:node-id node))) (:node-id node)))) nodes))
+
+
+        prologue (str "digraph g {\n"
+                      "  node [shape = record, height=.1];\n")
+
+        node-lines (str/join "\n"
+                             (map (fn [node-info]
+                                    (println (map name (filter some? (:original-overrides node-info))))
+                                    (format "  node%s[label = \"%s %s | { %s | %s}\"];"
+                                            (:node-id node-info)
+                                            (name (:type node-info))
+                                            (or (:name node-info) (:id node-info) (:path node-info) "")
+                                            (str "{{" (str/join "|" (map name (filter some? (:original-overrides node-info)))) "}}")
+                                            (mod (:node-id node-info) 10000)))
+                                  nodes))
+
+        sub-connection-lines (str/join "\n"
+                                       (map (fn [[from to]]
+                                              (format "  \"node%s\" -> \"node%s\";" from to))
+                                            sub-connections))
+
+        override-connection-lines (str/join "\n"
+                                       (map (fn [[from to]]
+                                              (format "  \"node%s\" -> \"node%s\" [color=lightgray];" from to))
+                                            override-connections))
+
+        epilogue "}"]
+    (println prologue)
+    (println node-lines)
+    (println sub-connection-lines)
+    (println override-connection-lines)
+    (println epilogue)))
       
 
     
