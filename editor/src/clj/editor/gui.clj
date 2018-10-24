@@ -3063,48 +3063,58 @@
       (assoc :layouts (map gui-tree (map first (g/sources-of n :layout-msgs)))))))
 
 (defn- children-and-layouts [node]
-  (let [children (:children node)]
+  (let [children (:children node)
+        layouts (remove #(= "Portrait" (:name %)) (:layouts node))]
     (concat (when (not= children :skipped) children)
-            (:layouts node))))
+            layouts)))
               
 
 
-(defn gui-tree->dot [gui-tree]
-  (let [nodes (tree-seq children-and-layouts children-and-layouts gui-tree)
-        node-infos (distinct (map #(select-keys [:node-id :type :id :path :original-overrides] %) nodes))
+(defn gui-tree->dot [gui-tree-root]
+  (let [nodes (tree-seq children-and-layouts children-and-layouts gui-tree-root)
         sub-connections (distinct (mapcat (fn [node] (map (partial vector (:node-id node)) (map :node-id (children-and-layouts node)))) nodes))
-        override-connections (distinct (mapcat (fn [node] (map (partial vector (:node-id node)) (disj (set (g/override-originals (:node-id node))) (:node-id node)))) nodes))
-
+        all-override-connections (distinct (mapcat (fn [node] (map (partial vector (:node-id node)) (disj (set (g/override-originals (:node-id node))) (:node-id node)))) nodes))
+        original-connections (distinct (keep (fn [node] (when-some [original (g/override-original (:node-id node))] [(:node-id node) original])) nodes))
+        original-nodes (let [seen (set (map :node-id nodes))
+                             original-ids (remove seen (map second original-connections))
+                             original-node-gui-trees (distinct (map gui-tree original-ids))]
+                         original-node-gui-trees)
 
         prologue (str "digraph g {\n"
                       "  node [shape = record, height=.1];\n")
 
         node-lines (str/join "\n"
                              (map (fn [node-info]
-                                    (println (map name (filter some? (:original-overrides node-info))))
+                                    (println :node-info (dissoc node-info :layouts :children))
                                     (format "  node%s[label = \"%s %s | { %s | %s}\"];"
                                             (:node-id node-info)
                                             (name (:type node-info))
                                             (or (:name node-info) (:id node-info) (:path node-info) "")
-                                            (str "{{" (str/join "|" (map name (filter some? (:original-overrides node-info)))) "}}")
+                                            (str "{{" (str/join "|" (map name (filter some? (reverse (:original-overrides node-info))))) "}}")
                                             (mod (:node-id node-info) 10000)))
-                                  nodes))
+                                  (concat nodes original-nodes)))
 
         sub-connection-lines (str/join "\n"
                                        (map (fn [[from to]]
                                               (format "  \"node%s\" -> \"node%s\";" from to))
                                             sub-connections))
 
-        override-connection-lines (str/join "\n"
-                                       (map (fn [[from to]]
-                                              (format "  \"node%s\" -> \"node%s\" [color=lightgray];" from to))
-                                            override-connections))
+        all-override-connection-lines (str/join "\n"
+                                                (map (fn [[from to]]
+                                                       (format "  \"node%s\" -> \"node%s\" [color=lightgray];" from to))
+                                                     all-override-connections))
+
+        original-connection-lines (str/join "\n"
+                                            (map (fn [[from to]]
+                                                   (format "  \"node%s\" -> \"node%s\" [color=lightgray];" from to))
+                                                 original-connections))
 
         epilogue "}"]
     (println prologue)
     (println node-lines)
     (println sub-connection-lines)
-    (println override-connection-lines)
+    (println original-connection-lines)
+    #_(println all-override-connection-lines)
     (println epilogue)))
       
 
