@@ -606,17 +606,11 @@
   (output transform-properties g/Any scene/produce-scalable-transform-properties)
   (output node-msg g/Any produce-node-msg)
   (input node-msgs g/Any :array)
-  (output node-msgs g/Any :cached (g/fnk [node-msgs node-msg]
-                                         (apply
-                                           merge-with
-                                           #(into (vec %1)
-                                                  (->> %2
-                                                       (sort-by (fn [nm] (get-in nm [0 :child-index])))
-                                                       flatten
-                                                       (map (fn [nm] (dissoc nm :child-index)))))
-                                           {:default [node-msg]}
-                                           node-msgs)))
-
+  (output node-msgs g/Any :cached (g/fnk [node-msgs node-msg] (into [node-msg]
+                                                                    (->> node-msgs
+                                                                         (sort-by #(get-in % [0 :child-index]))
+                                                                         flatten
+                                                                         (map #(dissoc % :child-index))))))
   (input node-rt-msgs g/Any :array)
   (output node-rt-msgs g/Any :cached (g/fnk [node-rt-msgs node-msg] (into [node-msg]
                                                                           (->> node-rt-msgs
@@ -1316,47 +1310,26 @@
                                                                      (get-in template-outline [:children 0 :children])))
   (output node-outline-reqs g/Any :cached (g/constantly []))
   (output node-msgs g/Any :cached (g/fnk [id node-msg scene-pb-msg]
-                                         (let [scene-default-node-msgs (into [] (map #(cond-> (assoc % :template-node-child true)
-                                                                                        (empty? (:parent %))
-                                                                                        (assoc :parent id)))
-                                                                             (:nodes scene-pb-msg))
-
-                                               scene-layout-node-msgs (into {}
-                                                                            (comp
-                                                                              (map (juxt :name :nodes))
-                                                                              (map (fn [[name nodes]]
-                                                                                      [name (into [] (map #(cond-> (assoc % :template-node-child true)
-                                                                                                             (empty? (:parent %))
-                                                                                                             (assoc :parent id)))
-                                                                                                  nodes)])))
-                                                                            (:layouts scene-pb-msg))]
-                                           (merge-with
-                                             #(into (vec %1) %2)
-                                             {:default [node-msg]}
-                                             {:default scene-default-node-msgs}
-                                             scene-layout-node-msgs))))
-
+                                    (into [node-msg] (map #(cond-> (assoc % :template-node-child true)
+                                                             (empty? (:parent %)) (assoc :parent id))
+                                                          (:nodes scene-pb-msg)))))
   (output node-rt-msgs g/Any :cached (g/fnk [node-msg scene-rt-pb-msg]
-                                            (let [parent-q (math/euler->quat (:rotation node-msg))]
-                                              (into [] (map #(cond-> (assoc % :child-index (:child-index node-msg))
-                                                               (empty? (:layer %))
-                                                               (assoc :layer (:layer node-msg))
-
-                                                               (:inherit-alpha %)
-                                                               (->
-                                                                 (update :alpha * (:alpha node-msg))
-                                                                 (assoc :inherit-alpha (:inherit-alpha node-msg)))
-
-                                                               (empty? (:parent %))
-                                                               (->
-                                                                 (assoc :parent (:parent node-msg))
-                                                                 ;; In fact incorrect, but only possibility to retain rotation/scale separation
-                                                                 (update :scale (partial mapv * (:scale node-msg)))
-                                                                 (update :position trans-position (:position node-msg) parent-q (:scale node-msg))
-                                                                 (update :rotation trans-rotation parent-q))))
-                                                    (:nodes scene-rt-pb-msg)))))
+                                       (let [parent-q (math/euler->quat (:rotation node-msg))]
+                                         (into [] (map #(cond-> (assoc % :child-index (:child-index node-msg))
+                                                          (empty? (:layer %)) (assoc :layer (:layer node-msg))
+                                                          (:inherit-alpha %) (->
+                                                                               (update :alpha * (:alpha node-msg))
+                                                                               (assoc :inherit-alpha (:inherit-alpha node-msg)))
+                                                          (empty? (:parent %)) (->
+                                                                                 (assoc :parent (:parent node-msg))
+                                                                                 ;; In fact incorrect, but only possibility to retain rotation/scale separation
+                                                                                 (update :scale (partial mapv * (:scale node-msg)))
+                                                                                 (update :position trans-position (:position node-msg) parent-q (:scale node-msg))
+                                                                                 (update :rotation trans-rotation parent-q)))
+                                                       (:nodes scene-rt-pb-msg))))))
   (output node-overrides g/Any :cached (g/fnk [id _overridden-properties template-overrides]
-                                              (merge {id _overridden-properties} template-overrides)))
+                                              (-> {id _overridden-properties}
+                                                (merge template-overrides))))
   (output aabb g/Any (g/fnk [template-scene transform]
                        (geom/aabb-transform (:aabb template-scene (geom/null-aabb)) transform)))
   (output scene-children g/Any (g/fnk [_node-id id template-scene]
@@ -1463,7 +1436,6 @@
 
   (output node-rt-msgs g/Any :cached
     (g/fnk [node-msgs node-rt-msgs bone-node-msgs spine-skin-ids]
-      ;; here node-msgs is now a map layout -> node-msgs, need to adapt spine-skin fixup and prolly bone-node-msgs also.
       (let [pb-msg (first node-msgs)
             rt-pb-msgs (into node-rt-msgs [(update pb-msg :spine-skin (fn [skin] (or skin "")))])]
         (into rt-pb-msgs bone-node-msgs))))
@@ -1849,14 +1821,10 @@
   (select-keys node-desc (remove non-overridable-fields (map prop-index->prop-key (:overridden-fields node-desc)))))
 
 (defn- layout-pb-msg [name node-msgs]
-  (let [overridden-non-template-children (into []
-                                               (comp
-                                                 (filter (comp complement :template-node-child))
-                                                 (filter (comp not-empty :overridden-fields)))
-                                               (get node-msgs :default))]
+  (let [node-msgs (filter (comp not-empty :overridden-fields) node-msgs)]
     (cond-> {:name name}
-      (not-empty overridden-non-template-children)
-      (assoc :nodes overridden-non-template-children))))
+      (not-empty node-msgs)
+      (assoc :nodes node-msgs))))
 
 (g/defnode LayoutNode
   (inherits outline/OutlineNode)
@@ -1886,8 +1854,7 @@
                                                         [:scene :node-tree-scene]]]
                                          (g/connect or-node-tree from self to))
 
-                                       (for [[from to] [[:id-prefix :id-prefix]
-                                                        [:name :current-layout]]]
+                                       (for [[from to] [[:id-prefix :id-prefix]]]
                                          (g/connect self from or-node-tree to))
                                        (for [[id data] or-data
                                              :let [node-id (node-mapping id)]
@@ -1904,14 +1871,12 @@
                                                            :label name
                                                            :icon layout-icon
                                                            :outline-error? (g/error-fatal? build-errors)}))
-  (output pb-msg g/Any :cached (g/fnk [_node-id name node-msgs] (layout-pb-msg name node-msgs)))
+  (output pb-msg g/Any :cached (g/fnk [name node-msgs] (layout-pb-msg name node-msgs)))
   (output pb-rt-msg g/Any :cached (g/fnk [name node-rt-msgs] (layout-pb-msg name node-rt-msgs)))
   (input node-tree-node-outline g/Any)
   (output layout-node-outline g/Any (g/fnk [name node-tree-node-outline] [name node-tree-node-outline]))
   (input node-tree-scene g/Any)
-  (output layout-scene g/Any (g/fnk [_node-id name node-tree-scene]
-                                    #_(println "output scene" (g/node-type* _node-id) _node-id)
-                                    [name node-tree-scene]))
+  (output layout-scene g/Any (g/fnk [name node-tree-scene] [name node-tree-scene]))
   (input id-prefix g/Str)
   (output id-prefix g/Str (gu/passthrough id-prefix))
   (output build-errors g/Any :cached (g/fnk [_node-id name name-counts]
@@ -1944,7 +1909,6 @@
   (output node-outline outline/OutlineData :cached
           (gen-outline-fnk "Nodes" nil 0 true (mapv (fn [[nt kw]] {:node-type nt :tx-attach-fn (gen-gui-node-attach-fn kw)}) node-type->kw)))
   (output scene g/Any :cached (g/fnk [_node-id child-scenes]
-                                     #_(println "output scene" (g/node-type* _node-id) _node-id)
                                      {:node-id _node-id
                                       :aabb (reduce geom/aabb-union (geom/null-aabb) (map :aabb child-scenes))
                                       :children child-scenes}))
@@ -1952,13 +1916,10 @@
   (output id-counts NameCounts :cached (g/fnk [ids] (frequencies ids)))
   (input node-msgs g/Any :array)
   (output node-msgs g/Any :cached (g/fnk [node-msgs]
-                                         (into {}
-                                               (map (fn [[layout node-msgs]]
-                                                      [layout (->> node-msgs
-                                                                   (sort-by #(get-in % [0 :child-index]))
-                                                                   flatten
-                                                                   (map #(dissoc % :child-index)))]))
-                                               (apply merge-with concat node-msgs))))
+                                         (->> node-msgs
+                                              (sort-by #(get-in % [0 :child-index]))
+                                              flatten
+                                              (map #(dissoc % :child-index)))))
   (input node-rt-msgs g/Any :array)
   (output node-rt-msgs g/Any :cached (g/fnk [node-rt-msgs]
                                             (->> node-rt-msgs
@@ -2099,7 +2060,6 @@
       (sort-children node-order scene))))
 
 (g/defnk produce-scene [_node-id scene-dims aabb child-scenes]
-  #_(println "output scene" (g/node-type* _node-id) _node-id)
   (let [w (:width scene-dims)
         h (:height scene-dims)
         scene {:node-id _node-id
@@ -2121,7 +2081,7 @@
    :adjust-reference adjust-reference
    :background-color background-color
    :max-nodes max-nodes
-   :nodes (get node-msgs :default)
+   :nodes node-msgs
    :layers layer-msgs
    :fonts font-msgs
    :textures texture-msgs
@@ -2130,8 +2090,6 @@
    :particlefxs particlefx-resource-msgs})
 
 (g/defnk produce-pb-msg [script-resource material-resource adjust-reference background-color max-nodes node-msgs layer-msgs font-msgs texture-msgs layout-msgs spine-scene-msgs particlefx-resource-msgs]
-  (def last-node-msgs node-msgs)
-  (def last-layout-msgs layout-msgs)
   (->scene-pb-msg script-resource material-resource adjust-reference background-color max-nodes node-msgs layer-msgs font-msgs texture-msgs layout-msgs spine-scene-msgs particlefx-resource-msgs))
 
 (g/defnk produce-rt-pb-msg [script-resource material-resource adjust-reference background-color max-nodes node-rt-msgs layer-msgs font-msgs texture-msgs layout-rt-msgs spine-scene-msgs particlefx-resource-msgs]
@@ -2275,16 +2233,6 @@
   (input layer-msgs g/Any)
   (output layer-msgs g/Any (g/fnk [layer-msgs] (map #(dissoc % :child-index) (sort-by :child-index layer-msgs))))
   (input layout-msgs g/Any :array)
-  (output layout-msgs g/Any (g/fnk [layout-msgs node-msgs]
-                                   (into []
-                                         (comp
-                                           (map (juxt :name :nodes))
-                                           (map (fn [[name nodes]]
-                                                  {:name name
-                                                   :nodes (into nodes
-                                                                (filter (comp not-empty :overridden-fields))
-                                                                (get node-msgs name))})))
-                                         layout-msgs)))
   (input layout-rt-msgs g/Any :array)
   (input spine-scene-msgs g/Any :array)
   (input particlefx-resource-msgs g/Any :array)
@@ -3017,6 +2965,7 @@
 (def ^:private kw->node-type (set/map-invert node-type->kw))
 
 
+
 ;;;
 
 
@@ -3092,7 +3041,18 @@
                                             (or (:name node-info) (:id node-info) (:path node-info) "")
                                             (str "{{" (str/join "|" (map name (filter some? (reverse (:original-overrides node-info))))) "}}")
                                             (mod (:node-id node-info) 10000)))
-                                  (concat nodes original-nodes)))
+                                  nodes))
+
+        original-node-lines (str/join "\n"
+                                      (map (fn [node-info]
+                                             (println :node-info (dissoc node-info :layouts :children))
+                                             (format "  node%s[color=lightgray, fontcolor=lightgray, label = \"%s %s | { %s | %s}\"];"
+                                                     (:node-id node-info)
+                                                     (name (:type node-info))
+                                                     (or (:name node-info) (:id node-info) (:path node-info) "")
+                                                     (str "{{" (str/join "|" (map name (filter some? (reverse (:original-overrides node-info))))) "}}")
+                                                     (mod (:node-id node-info) 10000)))
+                                           original-nodes))
 
         sub-connection-lines (str/join "\n"
                                        (map (fn [[from to]]
@@ -3112,6 +3072,7 @@
         epilogue "}"]
     (println prologue)
     (println node-lines)
+    (println original-node-lines)
     (println sub-connection-lines)
     (println original-connection-lines)
     #_(println all-override-connection-lines)
