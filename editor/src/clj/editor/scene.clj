@@ -1097,6 +1097,7 @@
                                (true? (:grid opts)) grid/Grid
                                (:grid opts) (:grid opts)
                                :else grid/Grid)
+        scene-adapter-type (get opts :scene-adapter)
         tool-controller-type (get opts :tool-controller scene-tools/ToolController)]
     (concat
       (g/make-nodes view-graph
@@ -1109,10 +1110,11 @@
                                                                                      (select-fn selection))))]
                      camera          [c/CameraController :local-camera (or (:camera opts) (c/make-camera :orthographic identity {:fov-x 1000 :fov-y 1000}))]
                      grid            grid-type
+                     scene-adapter   [scene-adapter-type :resource resource-node]
                      tool-controller [tool-controller-type :prefs prefs]
                      rulers          [rulers/Rulers]]
 
-                    (g/connect resource-node   :scene                         view-id         :scene)
+                    (g/connect scene-adapter   :scene                         view-id         :scene)
 
                     (g/connect background      :renderable                    view-id         :aux-renderables)
 

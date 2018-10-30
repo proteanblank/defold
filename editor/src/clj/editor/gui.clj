@@ -2164,6 +2164,17 @@
 (defn- get-ids [outline]
   (map :label (tree-seq (constantly true) :children outline)))
 
+(g/defnode GuiSceneAdapter
+  (property resource g/NodeID
+            (value (gu/passthrough original-resource))
+            (set (fn [evaluation-context self old-value new-value]
+                   (concat
+                     (g/connect new-value :_node-id self :original-resource)
+                     (g/connect new-value :scene self :original-scene)))))
+  (input original-resource g/NodeID)
+  (input original-scene g/Any)
+  (output scene g/Any (g/fnk [original-scene] original-scene)))
+
 (g/defnode GuiSceneNode
   (inherits resource-node/ResourceNode)
 
@@ -2879,7 +2890,7 @@
         :tag-opts (:tag-opts def)
         :template (:template def)
         :view-types [:scene :text]
-        :view-opts {:scene {:grid true}}))))
+        :view-opts {:scene {:grid true :scene-adapter GuiSceneAdapter}}))))
 
 (defn register-resource-types [workspace]
   (register workspace pb-def))
