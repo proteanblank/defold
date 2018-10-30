@@ -3039,7 +3039,10 @@
                                             (:node-id node-info)
                                             (name (:type node-info))
                                             (or (:name node-info) (:id node-info) (:path node-info) "")
-                                            (str "{{" (str/join "|" (map name (filter some? (reverse (:original-overrides node-info))))) "}}")
+                                            (str "{{" (str/join "|" (map #(if (keyword %)
+                                                                            (name %)
+                                                                            %)
+                                                                         (filter some? (reverse (:original-overrides node-info))))) "}}")
                                             (mod (:node-id node-info) 10000)))
                                   nodes))
 
@@ -3050,7 +3053,10 @@
                                                      (:node-id node-info)
                                                      (name (:type node-info))
                                                      (or (:name node-info) (:id node-info) (:path node-info) "")
-                                                     (str "{{" (str/join "|" (map name (filter some? (reverse (:original-overrides node-info))))) "}}")
+                                                     (str "{{" (str/join "|" (map #(if (keyword %)
+                                                                                     (name %)
+                                                                                     %)
+                                                                                  (filter some? (reverse (:original-overrides node-info))))) "}}")
                                                      (mod (:node-id node-info) 10000)))
                                            original-nodes))
 
