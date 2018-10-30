@@ -2,6 +2,7 @@
 ;; * outline dependent on selected layout in scene adapter
 ;; * scene adapter fallback
 ;; * scene output -> scenes, accumulating the layouts
+;; * aabb/scene-dims dependent on current-layout - should be baked in to scenes?
 
 (ns editor.gui
   (:require [schema.core :as s]
@@ -347,8 +348,7 @@
    [:spine-scene-names :spine-scene-names]
    [:particlefx-infos :particlefx-infos]
    [:particlefx-resource-names :particlefx-resource-names]
-   [:id-prefix :id-prefix]
-   [:current-layout :current-layout]])
+   [:id-prefix :id-prefix]])
 
 (def gui-node-attachments
   [[:_node-id :nodes]
@@ -655,8 +655,6 @@
   (output node-overrides g/Any :cached (g/fnk [node-overrides id _overridden-properties]
                                               (into {id _overridden-properties}
                                                     node-overrides)))
-  (input current-layout g/Str)
-  (output current-layout g/Str (gu/passthrough current-layout))
   (input child-build-errors g/Any :array)
   (output build-errors-gui-node g/Any :cached (g/fnk [_node-id id id-counts layer layer-names]
                                                      (g/package-errors _node-id
@@ -1291,8 +1289,7 @@
                                                                   [:spine-scene-names :aux-spine-scene-names]
                                                                   [:particlefx-infos :aux-particlefx-infos]
                                                                   [:particlefx-resource-names :aux-particlefx-resource-names]
-                                                                  [:template-prefix :id-prefix]
-                                                                  [:current-layout :current-layout]]]
+                                                                  [:template-prefix :id-prefix]]]
                                                    (g/connect self from or-scene to)))))))))
                          []))))))
 
@@ -1311,7 +1308,7 @@
 
                                         ; Overloaded outputs
   (output node-outline-link resource/Resource (gu/passthrough template-resource))
-  (output node-outline-children [outline/OutlineData] :cached (g/fnk [template-outline current-layout]
+  (output node-outline-children [outline/OutlineData] :cached (g/fnk [template-outline]
                                                                      (get-in template-outline [:children 0 :children])))
   (output node-outline-reqs g/Any :cached (g/constantly []))
   (output node-msgs g/Any :cached (g/fnk [id node-msg scene-pb-msg]
@@ -1845,10 +1842,8 @@
                          node-tree (g/node-value scene :node-tree evaluation-context)
                          or-data new-value]
                      (g/override node-tree {:traverse? (fn [basis [src src-label tgt tgt-label]]
-                                                         (and (not (g/node-instance? basis TemplateNode src))
-                                                              (or (g/node-instance? basis GuiNode src)
-                                                                  (g/node-instance? basis NodeTree src)
-                                                                  (g/node-instance? basis GuiSceneNode src))))}
+                                                         (or (g/node-instance? basis GuiNode src)
+                                                             (g/node-instance? basis NodeTree src)))}
                                  (fn [evaluation-context id-mapping]
                                    (let [or-node-tree (get id-mapping node-tree)
                                          node-mapping (comp id-mapping (g/node-value node-tree :node-ids evaluation-context))]
@@ -1966,8 +1961,6 @@
   (output particlefx-resource-names GuiResourceNames (gu/passthrough particlefx-resource-names))
   (input id-prefix g/Str)
   (output id-prefix g/Str (gu/passthrough id-prefix))
-  (input current-layout g/Str)
-  (output current-layout g/Str (gu/passthrough current-layout))
   (input child-build-errors g/Any :array)
   (output build-errors g/Any (gu/passthrough child-build-errors))
   (input template-build-targets g/Any :array)
@@ -2177,10 +2170,7 @@
                    (concat
                      (g/connect new-value :_node-id self :original-resource)
                      (g/connect new-value :scene self :original-scene)
-                     (g/connect new-value :layout-msgs self :layout-msgs)
-                     ;; (g/connect self :visible-layout new-value :current-layout)  can't because of volatility
-
-                     ))))
+                     (g/connect new-value :layout-msgs self :layout-msgs)))))
   (property visible-layout g/Str (default (g/constantly ""))
             (dynamic visible (g/constantly false))
             (dynamic edit-type (g/fnk [layout-msgs]
@@ -2249,8 +2239,6 @@
   (input dep-build-targets g/Any :array)
   (input project-settings g/Any)
   (input display-profiles g/Any)
-  (input current-layout g/Str)
-  (output current-layout g/Str (g/fnk [current-layout #_visible-layout] (or current-layout #_visible-layout)))
   (input node-msgs g/Any)
   (output node-msgs g/Any (gu/passthrough node-msgs))
   (input node-rt-msgs g/Any)
@@ -2336,8 +2324,8 @@
   (output layout-node-outlines g/Any :cached (g/fnk [layout-node-outlines] (into {} layout-node-outlines)))
   (input default-node-outline g/Any)
   (output node-outline outline/OutlineData :cached
-          (g/fnk [_node-id default-node-outline layout-node-outlines current-layout child-outlines own-build-errors]
-                 (let [node-outline (get layout-node-outlines current-layout default-node-outline)
+          (g/fnk [_node-id default-node-outline layout-node-outlines child-outlines own-build-errors]
+                 (let [node-outline default-node-outline #_(get layout-node-outlines current-layout default-node-outline)
                        label (:label pb-def)
                        icon (:icon pb-def)]
                    {:node-id _node-id
@@ -2349,14 +2337,14 @@
   (input default-scene g/Any)
   (input layout-scenes g/Any :array)
   (output layout-scenes g/Any :cached (g/fnk [layout-scenes] (into {} layout-scenes)))
-  (output child-scenes g/Any :cached (g/fnk [default-scene layout-scenes current-layout]
-                                            (let [node-tree-scene (get layout-scenes current-layout default-scene)]
+  (output child-scenes g/Any :cached (g/fnk [default-scene layout-scenes #_current-layout]
+                                            (let [node-tree-scene default-scene #_(get layout-scenes current-layout default-scene)]
                                               (:children node-tree-scene))))
   (output scene g/Any :cached produce-scene)
   (output template-scene g/Any :cached (g/fnk [scene child-scenes]
                                               (assoc scene :aabb (reduce geom/aabb-union (geom/null-aabb) (keep :aabb child-scenes)))))
-  (output scene-dims g/Any :cached (g/fnk [project-settings current-layout display-profiles]
-                                          (or (some #(and (= current-layout (:name %)) (first (:qualifiers %))) display-profiles)
+  (output scene-dims g/Any :cached (g/fnk [project-settings #_current-layout display-profiles]
+                                          (or #_(some #(and (= current-layout (:name %)) (first (:qualifiers %))) display-profiles)
                                               (let [w (get project-settings ["display" "width"])
                                                     h (get project-settings ["display" "height"])]
                                                 {:width w :height h}))))
@@ -2823,8 +2811,7 @@
                                      [:spine-scene-names :spine-scene-names]
                                      [:particlefx-infos :particlefx-infos]
                                      [:particlefx-resource-names :particlefx-resource-names]
-                                     [:id-prefix :id-prefix]
-                                     [:current-layout :current-layout]]]
+                                     [:id-prefix :id-prefix]]]
                       (g/connect self from node-tree to))
                     ;; Note that the child-index used below is
                     ;; not "local" to the parent but a global ordering of nodes.
@@ -3144,7 +3131,7 @@
                       :original-overrides (original-overrides n)
                       :type (:k (g/node-type* n))
                       :id (g/node-value n :id)
-                      :current-layout (g/node-value n :current-layout)}))
+                      #_:current-layout #_(g/node-value n :current-layout)}))
 
       (g/node-instance? NodeTree n)
       (recur
@@ -3154,7 +3141,7 @@
                       :originals (g/override-originals n)
                       :original-overrides (original-overrides n)
                       :type (:k (g/node-type* n))
-                      :current-layout (g/node-value n :current-layout)}))
+                      #_:current-layout #_(g/node-value n :current-layout)}))
 
       (g/node-instance? LayoutNode n)
       (recur
@@ -3175,7 +3162,7 @@
                       :original-overrides (original-overrides n)
                       :type (:k (g/node-type* n))
                       :resource (resource/resource->proj-path (g/node-value n :resource))
-                      :current-layout (g/node-value n :current-layout)}))
+                      #_:current-layout #_(g/node-value n :current-layout)}))
       :default
       (recur
         nil
@@ -3183,7 +3170,7 @@
 
 (defn ppc [pc]
   (when-some [step (first pc)]
-    (println (:node-id step) (:type step) (or (:id step) "") (or (:name step) "") (or (:resource step) "") (:current-layout step))
+    (println (:node-id step) (:type step) (or (:id step) "") (or (:name step) "") (or (:resource step) "") #_(:current-layout step))
     (recur (rest pc))))
 
 (defn originals [n]
