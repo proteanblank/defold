@@ -451,6 +451,7 @@
 (g/defnode SceneRenderer
   (property frame-version g/Any)
 
+  (input scene-adapter g/NodeID :cascade-delete)
   (input active-view g/NodeID)
   (input scene g/Any :substitute substitute-scene)
   (input selection g/Any)
@@ -1114,6 +1115,7 @@
                      tool-controller [tool-controller-type :prefs prefs]
                      rulers          [rulers/Rulers]]
 
+                    (g/connect scene-adapter   :_node-id                      view-id         :scene-adapter)
                     (g/connect scene-adapter   :scene                         view-id         :scene)
 
                     (g/connect background      :renderable                    view-id         :aux-renderables)

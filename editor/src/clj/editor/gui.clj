@@ -2170,9 +2170,21 @@
             (set (fn [evaluation-context self old-value new-value]
                    (concat
                      (g/connect new-value :_node-id self :original-resource)
-                     (g/connect new-value :scene self :original-scene)))))
+                     (g/connect new-value :scene self :original-scene)
+                     (g/connect new-value :layout-msgs self :layout-msgs)
+                     ;; (g/connect self :visible-layout new-value :current-layout)  can't because of volatility
+
+                     ))))
+  (property visible-layout g/Str (default (g/constantly ""))
+            (dynamic visible (g/constantly false))
+            (dynamic edit-type (g/fnk [layout-msgs]
+                                      {:type :choicebox
+                                       :options (into {"" "Default"}
+                                                      (map (fn [l] [(:name l) (:name l)]) layout-msgs))})))
+
   (input original-resource g/NodeID)
   (input original-scene g/Any)
+  (input layout-msgs g/Any)
   (output scene g/Any (g/fnk [original-scene] original-scene)))
 
 (g/defnode GuiSceneNode
@@ -2211,7 +2223,7 @@
   (property pb g/Any (dynamic visible (g/constantly false)))
   (property def g/Any (dynamic visible (g/constantly false)))
   (property background-color types/Color (dynamic visible (g/constantly false)) (default [1 1 1 1]))
-  (property visible-layout g/Str (default (g/constantly ""))
+  #_(property visible-layout g/Str (default (g/constantly ""))
             (dynamic visible (g/constantly false))
             (dynamic edit-type (g/fnk [layout-msgs] {:type :choicebox
                                                      :options (into {"" "Default"} (map (fn [l] [(:name l) (:name l)]) layout-msgs))})))
@@ -2232,7 +2244,7 @@
   (input project-settings g/Any)
   (input display-profiles g/Any)
   (input current-layout g/Str)
-  (output current-layout g/Str (g/fnk [current-layout visible-layout] (or current-layout visible-layout)))
+  (output current-layout g/Str (g/fnk [current-layout #_visible-layout] (or current-layout #_visible-layout)))
   (input node-msgs g/Any)
   (output node-msgs g/Any (gu/passthrough node-msgs))
   (input node-rt-msgs g/Any)
@@ -2244,6 +2256,7 @@
   (input layer-msgs g/Any)
   (output layer-msgs g/Any (g/fnk [layer-msgs] (map #(dissoc % :child-index) (sort-by :child-index layer-msgs))))
   (input layout-msgs g/Any :array)
+  (output layout-msgs g/Any (gu/passthrough layout-msgs))
   (input layout-rt-msgs g/Any :array)
   (input spine-scene-msgs g/Any :array)
   (input particlefx-resource-msgs g/Any :array)
@@ -2939,21 +2952,30 @@
     (when (and res-node (g/node-instance? GuiSceneNode res-node))
       res-node)))
 
+(defn- active-scene-view [app-view]
+  (when-let [view-node (g/node-value app-view :active-view)]
+    (when (g/node-instance? scene/SceneView view-node)
+      view-node)))
+
 (handler/defhandler :set-gui-layout :workbench
-  (active? [project active-resource] (boolean (resource->gui-scene project active-resource)))
-  (run [project active-resource user-data] (when user-data
-                                             (when-let [scene (resource->gui-scene project active-resource)]
-                                               (g/transact (g/set-property scene :visible-layout user-data)))))
-  (state [project active-resource]
-         (when-let [scene (resource->gui-scene project active-resource)]
-           (let [visible (g/node-value scene :visible-layout)]
+  (active? [project active-resource]
+           (boolean (resource->gui-scene project active-resource)))
+  (run [app-view user-data] (when user-data
+                              (when-let [scene-view (active-scene-view app-view)]
+                                (let [adapter (ffirst (g/sources-of scene-view :scene-adapter))]
+                                  (g/transact (g/set-property adapter :visible-layout user-data))))))
+  (state [app-view]
+         (when-let [scene-view (active-scene-view app-view)]
+           (let [adapter (ffirst (g/sources-of scene-view :scene-adapter))
+                 visible (g/node-value adapter :visible-layout)]
              {:label (if (empty? visible) "Default" visible)
               :command :set-gui-layout
               :user-data visible})))
-  (options [project active-resource user-data]
+  (options [app-view user-data]
            (when-not user-data
-             (when-let [scene (resource->gui-scene project active-resource)]
-               (let [layout-msgs (g/node-value scene :layout-msgs)
+             (when-let [scene-view (active-scene-view app-view)]
+               (let [adapter (ffirst (g/sources-of scene-view :scene-adapter))
+                     layout-msgs (g/node-value adapter :layout-msgs)
                      layouts (cons "" (map :name layout-msgs))]
                  (for [l layouts]
                    {:label (if (empty? l) "Default" l)
