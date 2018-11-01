@@ -13,6 +13,7 @@
             [editor.math :as math]
             [editor.error-reporting :as error-reporting]
             [util.profiler :as profiler]
+            [editor.outline :as outline]
             [editor.resource :as resource]
             [editor.scene-cache :as scene-cache]
             [editor.scene-text :as scene-text]
@@ -453,7 +454,13 @@
 
   (input scene-adapter g/NodeID :cascade-delete)
   (input active-view g/NodeID)
+
   (input scene g/Any :substitute substitute-scene)
+  (output scene g/Any (gu/passthrough scene))
+
+  (input node-outline outline/OutlineData)
+  (output node-outline outline/OutlineData (gu/passthrough node-outline))
+
   (input selection g/Any)
   (input camera Camera)
   (input aux-renderables pass/RenderData :array :substitute gu/array-subst-remove-errors)
@@ -1089,6 +1096,17 @@
 (defmethod attach-tool-controller :default
   [_ tool-node view-id resource-node])
 
+(g/defnode PassthroughSceneAdapter
+  (property resource g/NodeID
+            (set (fn [evaluation-context self old-value new-value]
+                   (concat
+                     (g/connect new-value :scene self :scene)
+                     (g/connect new-value :node-outline self :node-outline)))))
+  (input scene g/Any)
+  (output scene g/Any (gu/passthrough scene))
+  (input node-outline outline/OutlineData)
+  (output node-outline outline/OutlineData (gu/passthrough node-outline)))
+
 (defn setup-view [view-id resource-node opts]
   (let [view-graph           (g/node-id->graph-id view-id)
         app-view-id          (:app-view opts)
@@ -1098,7 +1116,7 @@
                                (true? (:grid opts)) grid/Grid
                                (:grid opts) (:grid opts)
                                :else grid/Grid)
-        scene-adapter-type (get opts :scene-adapter)
+        scene-adapter-type (get opts :scene-adapter PassthroughSceneAdapter)
         tool-controller-type (get opts :tool-controller scene-tools/ToolController)]
     (concat
       (g/make-nodes view-graph
@@ -1117,6 +1135,7 @@
 
                     (g/connect scene-adapter   :_node-id                      view-id         :scene-adapter)
                     (g/connect scene-adapter   :scene                         view-id         :scene)
+                    (g/connect scene-adapter   :node-outline                  view-id         :node-outline)
 
                     (g/connect background      :renderable                    view-id         :aux-renderables)
 

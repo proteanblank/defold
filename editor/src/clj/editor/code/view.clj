@@ -7,6 +7,7 @@
             [editor.graph-util :as gu]
             [editor.handler :as handler]
             [editor.keymap :as keymap]
+            [editor.outline :as outline]
             [editor.prefs :as prefs]
             [editor.resource :as resource]
             [editor.ui :as ui]
@@ -857,7 +858,10 @@
   (output minimap-cursor-range-draw-infos CursorRangeDrawInfos :cached produce-minimap-cursor-range-draw-infos)
   (output execution-markers r/Regions :cached produce-execution-markers)
   (output repaint-canvas SideEffect :cached produce-repaint-canvas)
-  (output repaint-cursors SideEffect :cached produce-repaint-cursors))
+  (output repaint-cursors SideEffect :cached produce-repaint-cursors)
+
+  (input node-outline outline/OutlineData)
+  (output node-outline outline/OutlineData (gu/passthrough node-outline)))
 
 (defn- mouse-button [^MouseEvent event]
   (condp = (.getButton event)
@@ -2058,6 +2062,7 @@
         (g/connect resource-node :invalidated-rows view-node :invalidated-rows)
         (g/connect resource-node :lines view-node :lines)
         (g/connect resource-node :regions view-node :regions)
+        (g/connect resource-node :node-outline view-node :node-outline)
         (g/connect app-view :debugger-execution-locations view-node :debugger-execution-locations)))
     view-node))
 

@@ -1,27 +1,29 @@
 (ns editor.form-view
-  (:require [dynamo.graph :as g]
-            [clojure.string :as string]
-            [editor.form :as form]
+  (:require [clojure.string :as string]
+            [dynamo.graph :as g]
+            [editor.dialogs :as dialogs]
             [editor.field-expression :as field-expression]
+            [editor.form :as form]
+            [editor.graph-util :as gu]
+            [editor.jfx :as jfx]
+            [editor.outline :as outline]
+            [editor.resource :as resource]
             [editor.ui :as ui]
             [editor.url :as url]
-            [editor.jfx :as jfx]            
-            [editor.dialogs :as dialogs]
-            [editor.workspace :as workspace]
-            [editor.resource :as resource]
-            [editor.view :as view])
-  (:import [java.util Collection]
-           [javafx.scene Parent Node]
-           [javafx.scene.input KeyCode ContextMenuEvent]
-           [javafx.geometry Insets Pos HPos VPos]
-           [javafx.util Callback StringConverter]
+            [editor.view :as view]
+            [editor.workspace :as workspace])
+  (:import [com.defold.control ListView ListCell ListCellSkinWithBehavior TableCell TableCellBehavior TableCellSkinWithBehavior]
+           [com.sun.javafx.scene.control.behavior ListCellBehavior]
+           [java.util Collection]
+           [javafx.beans.binding Bindings]
            [javafx.beans.property ReadOnlyObjectWrapper]
            [javafx.beans.value ObservableNumberValue]
-           [javafx.beans.binding Bindings]
-           [javafx.scene.layout GridPane HBox VBox Priority ColumnConstraints]
+           [javafx.geometry Insets Pos HPos VPos]
+           [javafx.scene Parent Node]
            [javafx.scene.control Control Cell ListView$EditEvent TableView TableColumn TableColumn$CellDataFeatures TableColumn$CellEditEvent ScrollPane Label TextField ComboBox CheckBox Button ContextMenu MenuItem SelectionMode]
-           [com.defold.control ListView ListCell ListCellSkinWithBehavior TableCell TableCellBehavior TableCellSkinWithBehavior]
-           [com.sun.javafx.scene.control.behavior ListCellBehavior]))
+           [javafx.scene.input KeyCode ContextMenuEvent]
+           [javafx.scene.layout GridPane HBox VBox Priority ColumnConstraints]
+           [javafx.util Callback StringConverter]))
 
 ;; A note about the cell-factory controls (:list, :table, :2panel):
 ;; When clicking on another cell in the edited table, the edit is cancelled and
@@ -1031,7 +1033,9 @@
   (property workspace g/Any)
   (property project g/Any)
   (input form-data g/Any :substitute {})
-  (output form ScrollPane :cached produce-update-form))
+  (output form ScrollPane :cached produce-update-form)
+  (input node-outline outline/OutlineData)
+  (output node-outline outline/OutlineData (gu/passthrough node-outline)))
 
 (defn- do-make-form-view [graph ^Parent parent resource-node opts]
   (let [workspace (:workspace opts)
@@ -1040,7 +1044,8 @@
         repainter (ui/->timer 10 "refresh-form-view" (fn [_ _] (g/node-value view-id :form)))]
     (g/transact
       (concat
-        (g/connect resource-node :form-data view-id :form-data)))
+        (g/connect resource-node :form-data view-id :form-data)
+        (g/connect resource-node :node-outline view-id :node-outline)))
     (ui/timer-start! repainter)
     (ui/timer-stop-on-closed! ^Tab (:tab opts) repainter)
     view-id))

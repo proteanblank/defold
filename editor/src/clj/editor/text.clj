@@ -1,6 +1,7 @@
 (ns editor.text
   (:require [dynamo.graph :as g]
             [editor.core :as core]
+            [editor.outline :as outline]
             [editor.ui :as ui]
             [editor.view :as view]
             [editor.workspace :as workspace])
@@ -12,7 +13,7 @@
 
 (g/defnode TextView
   (inherits view/WorkbenchView)
-
+  (output node-outline outline/OutlineData (g/constantly nil))
   (property text-area TextArea))
 
 (defn make-view [graph ^Parent parent resource-node opts]

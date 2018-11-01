@@ -2170,6 +2170,7 @@
                    (concat
                      (g/connect new-value :_node-id self :original-resource)
                      (g/connect new-value :scene self :original-scene)
+                     (g/connect new-value :node-outline self :original-node-outline)
                      (g/connect new-value :layout-msgs self :layout-msgs)))))
   (property visible-layout g/Str (default (g/constantly ""))
             (dynamic visible (g/constantly false))
@@ -2177,11 +2178,13 @@
                                       {:type :choicebox
                                        :options (into {"" "Default"}
                                                       (map (fn [l] [(:name l) (:name l)]) layout-msgs))})))
-
+  (input layout-msgs g/Any)
   (input original-resource g/NodeID)
   (input original-scene g/Any)
-  (input layout-msgs g/Any)
-  (output scene g/Any (g/fnk [original-scene] original-scene)))
+  (output scene g/Any (gu/passthrough original-scene))
+  (input original-node-outline outline/OutlineData)
+  (output node-outline outline/OutlineData (gu/passthrough original-node-outline)))
+
 
 (g/defnode GuiSceneNode
   (inherits resource-node/ResourceNode)

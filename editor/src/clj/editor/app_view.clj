@@ -190,12 +190,12 @@
       (g/connect source-node source-label target-node target-label)
       [])))
 
-(defn- on-selected-tab-changed! [app-view app-scene resource-node view-type]
+(defn- on-selected-tab-changed! [app-view app-scene view-node resource-node view-type]
   (g/transact
     (concat
-      (replace-connection resource-node :node-outline app-view :active-outline)
+      (replace-connection view-node :node-outline app-view :active-outline)
       (if (= :scene view-type)
-        (replace-connection resource-node :scene app-view :active-scene)
+        (replace-connection view-node :scene app-view :active-scene)
         (disconnect-sources app-view :active-scene))))
   (g/invalidate-outputs! [[app-view :active-tab]])
   (ui/user-data! app-scene ::ui/refresh-requested? true))
@@ -1075,9 +1075,11 @@ If you do not specifically require different script states, consider changing th
         (error-reporting/report-exception! error))))
   (scene-cache/drop-context! nil))
 
+(defn- tab->view-node [^Tab tab]
+  (when tab (ui/user-data tab ::view)))
+
 (defn- tab->resource-node [^Tab tab]
-  (some-> tab
-    (ui/user-data ::view)
+  (some-> (tab->view-node tab)
     (g/node-value :view-data)
     second
     :resource-node))
@@ -1093,7 +1095,7 @@ If you do not specifically require different script states, consider changing th
       (.addListener
         (reify ChangeListener
           (changed [_this _observable _old-val new-val]
-            (on-selected-tab-changed! app-view app-scene (tab->resource-node new-val) (tab->view-type new-val))))))
+            (on-selected-tab-changed! app-view app-scene (tab->view-node new-val) (tab->resource-node new-val) (tab->view-type new-val))))))
   (-> tab-pane
       (.getTabs)
       (.addListener
@@ -1128,7 +1130,7 @@ If you do not specifically require different script states, consider changing th
         (ui/add-style! old-editor-tab-pane "inactive")
         (ui/remove-style! new-editor-tab-pane "inactive")
         (g/set-property! app-view :active-tab-pane new-editor-tab-pane)
-        (on-selected-tab-changed! app-view app-scene resource-node view-type)))))
+        (on-selected-tab-changed! app-view app-scene (tab->view-node selected-tab) resource-node view-type)))))
 
 (defn make-app-view [view-graph project ^Stage stage ^MenuBar menu-bar ^SplitPane editor-tabs-split ^TabPane tool-tab-pane]
   (let [app-scene (.getScene stage)]

@@ -7,6 +7,7 @@
    [editor.defold-project :as project]
    [editor.dialogs :as dialogs]
    [editor.handler :as handler]
+   [editor.outline :as outline]
    [editor.resource :as resource]
    [editor.ui :as ui]
    [editor.view :as view]
@@ -199,7 +200,8 @@
 
 (g/defnode WebViewNode
   (inherits view/WorkbenchView)
-  (property web-view WebView))
+  (property web-view WebView)
+  (output node-outline outline/OutlineData (g/constantly nil)))
 
 (defn- make-web-view
    ^WebView [project]
