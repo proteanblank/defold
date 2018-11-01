@@ -620,26 +620,35 @@
                                                                                (sort-by #(get-in % [0 :child-index]))
                                                                                flatten
                                                                                (map #(dissoc % :child-index))))))
-  (output aabb g/Any :abstract)
-  (output scene-children g/Any :cached (g/fnk [child-scenes] (vec (sort-by (comp :child-index :renderable) child-scenes))))
+  (output aabb-by-layout g/Any :abstract)
+  (output scene-children-by-layout g/Any :cached (g/fnk [child-scenes]
+                                                   ;; sort order should not differ between layouts; sort by :default layout
+                                                   (let [sorted-child-scenes (vec (sort-by (comp :child-index :renderable :default) child-scenes))]
+                                                     (apply merge-with concat sorted-child-scenes))))
   (output scene-renderable g/Any (g/constantly nil))
   (output scene-outline-renderable g/Any (g/constantly nil))
   (output color+alpha types/Color (g/fnk [color alpha] (assoc color 3 alpha)))
-  (output scene g/Any :cached (g/fnk [_node-id id aabb transform scene-children scene-renderable scene-outline-renderable]
-                                     (cond-> {:node-id _node-id
-                                              :node-outline-key id
-                                              :aabb aabb
-                                              :transform transform
-                                              :renderable scene-renderable}
+  
+  (output scene-by-layout g/Any :cached (g/fnk [_node-id id aabb-by-layout transform scene-children-by-layout scene-renderable scene-outline-renderable]
+                                          (into {}
+                                                (map (fn [[layout scene-children]]
+                                                       (let [aabb (aabb-by-layout layout)
+                                                             scene (cond-> {:node-id _node-id
+                                                                            :node-outline-key id
+                                                                            :aabb aabb
+                                                                            :transform transform
+                                                                            :renderable scene-renderable}
 
-                                       scene-outline-renderable
-                                       (assoc :children [{:node-id _node-id
-                                                          :node-outline-key id
-                                                          :aabb aabb
-                                                          :renderable scene-outline-renderable}])
+                                                                     scene-outline-renderable
+                                                                     (assoc :children [{:node-id _node-id
+                                                                                        :node-outline-key id
+                                                                                        :aabb aabb
+                                                                                        :renderable scene-outline-renderable}])
 
-                                       (seq scene-children)
-                                       (update :children (fnil into []) scene-children))))
+                                                                     (seq scene-children)
+                                                                     (update :children (fnil into []) scene-children))]
+                                                         [layout scene])))
+                                                scene-children-by-layout)))
 
   (input node-ids IDMap :array)
   (output id g/Str (g/fnk [id-prefix id] (str id-prefix id)))
@@ -695,17 +704,17 @@
 
   (output gpu-texture TextureLifecycle (g/constantly nil))
   (output aabb-size g/Any (gu/passthrough size))
-  (output aabb g/Any :cached (g/fnk [pivot aabb-size transform scene-children]
-                                    (let [offset-fn (partial mapv + (pivot-offset pivot aabb-size))
-                                          [min-x min-y _] (offset-fn [0 0 0])
-                                          [max-x max-y _] (offset-fn aabb-size)
-                                          self-aabb (-> (geom/null-aabb)
-                                                        (geom/aabb-incorporate min-x min-y 0)
-                                                        (geom/aabb-incorporate max-x max-y 0)
-                                                        (geom/aabb-transform transform))]
-                                      (transduce (comp (keep :aabb)
-                                                       (map #(geom/aabb-transform % transform)))
-                                                 geom/aabb-union self-aabb scene-children))))
+  (output aabb-by-layout... g/Any :cached (g/fnk [pivot aabb-size transform scene-children]
+                                         (let [offset-fn (partial mapv + (pivot-offset pivot aabb-size))
+                                               [min-x min-y _] (offset-fn [0 0 0])
+                                               [max-x max-y _] (offset-fn aabb-size)
+                                               self-aabb (-> (geom/null-aabb)
+                                                           (geom/aabb-incorporate min-x min-y 0)
+                                                           (geom/aabb-incorporate max-x max-y 0)
+                                                           (geom/aabb-transform transform))]
+                                           (transduce (comp (keep :aabb)
+                                                            (map #(geom/aabb-transform % transform)))
+                                                      geom/aabb-union self-aabb scene-children))))
   (output scene-renderable-user-data g/Any (g/constantly nil))
   (output scene-renderable g/Any :cached
           (g/fnk [_node-id child-index layer-index blend-mode inherit-alpha gpu-texture material-shader scene-renderable-user-data aabb]
