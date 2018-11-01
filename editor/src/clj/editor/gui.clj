@@ -1,6 +1,4 @@
 ;; todo:
-;; * outline dependent on selected layout in scene adapter
-;; * scene adapter fallback
 ;; * scene output -> scenes, accumulating the layouts
 ;; * aabb/scene-dims dependent on current-layout - should be baked in to scenes?
 
@@ -624,11 +622,10 @@
                                                                                (map #(dissoc % :child-index))))))
   (output aabb g/Any :abstract)
   (output scene-children g/Any :cached (g/fnk [child-scenes] (vec (sort-by (comp :child-index :renderable) child-scenes))))
-  (output scene-updatable g/Any (g/constantly nil))
   (output scene-renderable g/Any (g/constantly nil))
   (output scene-outline-renderable g/Any (g/constantly nil))
   (output color+alpha types/Color (g/fnk [color alpha] (assoc color 3 alpha)))
-  (output scene g/Any :cached (g/fnk [_node-id id aabb transform scene-children scene-renderable scene-outline-renderable scene-updatable]
+  (output scene g/Any :cached (g/fnk [_node-id id aabb transform scene-children scene-renderable scene-outline-renderable]
                                      (cond-> {:node-id _node-id
                                               :node-outline-key id
                                               :aabb aabb
@@ -640,9 +637,6 @@
                                                           :node-outline-key id
                                                           :aabb aabb
                                                           :renderable scene-outline-renderable}])
-
-                                       scene-updatable
-                                       (assoc :updatable scene-updatable)
 
                                        (seq scene-children)
                                        (update :children (fnil into []) scene-children))))
