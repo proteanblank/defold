@@ -692,11 +692,12 @@
 
 (defn- abstract-function-form
   [label type]
-  (let [format-string (str "Node %d does not supply a production function for the abstract '" label "' output. Add (output " label " " type " your-function) to the definition")]
-    `(pc/fnk [~'this]
+  (let [format-string (str "Node %d of type %s does not supply a production function for the abstract '" label "' output. Add (output " label " " type " your-function) to the definition")]
+    `(pc/fnk [~'this ~'_basis]
              (throw (AssertionError.
                      (format ~format-string
-                      (gt/node-id ~'this)))))))
+                             (gt/node-id ~'this)
+                             (:name @(gt/node-type ~'this ~'_basis))))))))
 
 (defn- parse-flags-and-options
   [allowed-flags allowed-options args]
@@ -889,13 +890,13 @@
 
 (defmethod process-as 'inherits [[_ & forms]]
   {:supertypes
-   (for [form forms]
-     (do
-       (assert-symbol "inherits" form)
-       (let [typeref (util/vgr form)]
-         (assert (node-type-resolve typeref)
-                 (str "Cannot inherit from " form " it cannot be resolved in this context (from namespace " *ns* ".)"))
-         typeref)))})
+   (mapv (fn [form]
+           (assert-symbol "inherits" form)
+           (let [typeref (util/vgr form)]
+             (assert (node-type-resolve typeref)
+                     (str "Cannot inherit from " form " as it cannot be resolved in this context (from namespace " *ns* ".)"))
+             typeref))
+         forms)})
 
 (defmethod process-as 'display-order [[_ decl]]
   {:display-order-decl decl})
