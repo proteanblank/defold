@@ -884,3 +884,10 @@
       (is (= [-45.0 0.0 0.0] (g/node-value (landscape-id-map "text2") :position)))
       (is (= [0.0 -45.0 0.0] (g/node-value (portrait-id-map "text1") :position)))
       (is (= [0.0 45.0 0.0] (g/node-value (portrait-id-map "text2") :position))))))
+
+(deftest gui-scene-generation2
+  (test-util/with-loaded-project "/Users/erik.angelin/Documents/DEFEDIT-1408"
+    (let [node-id (test-util/resource-node project "/main/panel2.gui")]
+      (def scene (g/node-value node-id :scene-by-layout))
+      (def templ-scene (g/node-value node-id :template-scene-by-layout)))))
+;;      (is (= 0.25 (get-in scene [:children 2 :children 1 :renderable :user-data :color 3]))))))

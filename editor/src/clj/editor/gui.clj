@@ -441,6 +441,8 @@
 (g/deftype ^:private NodeIndex [(s/one s/Int "node-id") (s/one s/Int "index")])
 (g/deftype ^:private NameIndex [(s/one s/Str "name") (s/one s/Int "index")])
 
+(g/deftype ^:private Layout->AABB {(s/cond-pre s/Keyword s/Str) AABB})
+
 (g/defnk override-node? [_basis _node-id] (g/override? _basis _node-id))
 (g/defnk not-override-node? [_basis _node-id] (not (g/override? _basis _node-id)))
 
@@ -630,13 +632,14 @@
                                                                                (sort-by #(get-in % [0 :child-index]))
                                                                                flatten
                                                                                (map #(dissoc % :child-index))))))
-  (output aabb-by-layout g/Any :abstract)
+  (output aabb-by-layout Layout->AABB :abstract)
   (output scene-children-by-layout g/Any :cached (g/fnk [child-scenes]
                                                    ;; child-scenes is [{layout scene}]
                                                    (let [layouts (into #{} (mapcat keys) child-scenes)
                                                          empty-scene-children-by-layout (zipmap layouts (repeat []))
                                                          ;; sort order should not differ between layouts; sort by :default layout
                                                          sorted-child-scenes (vec (sort-by (comp :child-index :renderable :default) child-scenes))]
+                                                     (assert (every? #(= layouts (set (keys %))) child-scenes) "Differing layouts available in child scenes")
                                                      (apply merge-with conj empty-scene-children-by-layout sorted-child-scenes))))
   (output scene-renderable g/Any (g/constantly nil))
   (output scene-outline-renderable g/Any (g/constantly nil))
@@ -718,19 +721,19 @@
   (output gpu-texture TextureLifecycle (g/constantly nil))
   (output aabb-size g/Any (gu/passthrough size))
 
-  (output aabb-by-layout g/Any :cached (g/fnk [pivot aabb-size transform scene-children-by-layout]
-                                         (util/map-vals (fn [scene-children]
-                                                          (let [offset-fn (partial mapv + (pivot-offset pivot aabb-size))
-                                                                [min-x min-y _] (offset-fn [0 0 0])
-                                                                [max-x max-y _] (offset-fn aabb-size)
-                                                                self-aabb (-> (geom/null-aabb)
-                                                                            (geom/aabb-incorporate min-x min-y 0)
-                                                                            (geom/aabb-incorporate max-x max-y 0)
-                                                                            (geom/aabb-transform transform))]
-                                                            (transduce (comp (keep :aabb)
-                                                                             (map #(geom/aabb-transform % transform)))
-                                                                       geom/aabb-union self-aabb scene-children)))
-                                                        (merge {:default []} scene-children-by-layout))))
+  (output aabb-by-layout Layout->AABB :cached (g/fnk [pivot aabb-size transform scene-children-by-layout]
+                                                (util/map-vals (fn [scene-children]
+                                                                 (let [offset-fn (partial mapv + (pivot-offset pivot aabb-size))
+                                                                       [min-x min-y _] (offset-fn [0 0 0])
+                                                                       [max-x max-y _] (offset-fn aabb-size)
+                                                                       self-aabb (-> (geom/null-aabb)
+                                                                                   (geom/aabb-incorporate min-x min-y 0)
+                                                                                   (geom/aabb-incorporate max-x max-y 0)
+                                                                                   (geom/aabb-transform transform))]
+                                                                   (transduce (comp (keep :aabb)
+                                                                                    (map #(geom/aabb-transform % transform)))
+                                                                              geom/aabb-union self-aabb scene-children)))
+                                                               (merge {:default []} scene-children-by-layout))))
   (output scene-renderable-user-data g/Any (g/constantly nil))
   (output scene-renderable g/Any :cached
           (g/fnk [_node-id child-index layer-index blend-mode inherit-alpha gpu-texture material-shader scene-renderable-user-data]
@@ -1349,10 +1352,10 @@
   (output node-overrides g/Any :cached (g/fnk [id _overridden-properties template-overrides]
                                               (-> {id _overridden-properties}
                                                   (merge template-overrides))))
-  (output aabb-by-layout g/Any (g/fnk [template-scene-by-layout transform]
-                                 (util/map-vals (fn [template-scene]
-                                                  (geom/aabb-transform (:aabb template-scene (geom/null-aabb)) transform))
-                                                (merge {:default nil} template-scene-by-layout))))
+  (output aabb-by-layout Layout->AABB (g/fnk [template-scene-by-layout transform]
+                                        (util/map-vals (fn [template-scene]
+                                                         (geom/aabb-transform (:aabb template-scene (geom/null-aabb)) transform))
+                                                       (merge {:default nil} template-scene-by-layout))))
   (output scene-children-by-layout g/Any (g/fnk [_node-id id template-scene-by-layout]
                                            (util/map-vals (fn [template-scene]
                                                             (if-let [child-scenes (:children (add-renderable-tags template-scene #{:gui}))]
@@ -1525,16 +1528,16 @@
                                                                     layer-index (assoc :layer-index layer-index)))))))))
   (output gpu-texture TextureLifecycle (g/constantly nil))
 
-  (output aabb-by-layout g/Any :cached (g/fnk [transform source-scene scene-children-by-layout]
-                                         (let [self-aabb (or (some-> source-scene
-                                                               :aabb
-                                                               (geom/aabb-transform transform))
-                                                             (geom/null-aabb))]
-                                           (util/map-vals (fn [scene-children]
-                                                            (transduce (comp (keep :aabb)
-                                                                             (map #(geom/aabb-transform % transform)))
-                                                                       geom/aabb-union self-aabb scene-children))
-                                                          (merge {:default []} scene-children-by-layout)))))
+  (output aabb-by-layout Layout->AABB :cached (g/fnk [transform source-scene scene-children-by-layout]
+                                                (let [self-aabb (or (some-> source-scene
+                                                                      :aabb
+                                                                      (geom/aabb-transform transform))
+                                                                    (geom/null-aabb))]
+                                                  (util/map-vals (fn [scene-children]
+                                                                   (transduce (comp (keep :aabb)
+                                                                                    (map #(geom/aabb-transform % transform)))
+                                                                              geom/aabb-union self-aabb scene-children))
+                                                                 (merge {:default []} scene-children-by-layout)))))
   (output scene-by-layout g/Any :cached (g/fnk [_node-id id aabb-by-layout transform source-scene scene-children-by-layout color+alpha inherit-alpha]
                                           (let [scene (if source-scene
                                                         (let [updatable (assoc (:updatable source-scene) :node-id _node-id)]
@@ -1902,7 +1905,9 @@
   (input node-tree-node-outline g/Any)
   (output layout-node-outline g/Any (g/fnk [name node-tree-node-outline] [name node-tree-node-outline]))
   (input node-tree-scene-by-layout g/Any)
-  (output layout-scene g/Any (g/fnk [name node-tree-scene-by-layout] [name (node-tree-scene-by-layout name)]))
+  (output layout-scene g/Any (g/fnk [name node-tree-scene-by-layout] [name (if (contains? node-tree-scene-by-layout name)
+                                                                             (node-tree-scene-by-layout name)
+                                                                             (node-tree-scene-by-layout :default))]))
   (input id-prefix g/Str)
   (output id-prefix g/Str (gu/passthrough id-prefix))
   (output build-errors g/Any :cached (g/fnk [_node-id name name-counts]
@@ -2100,14 +2105,14 @@
           (map (fn [[layout child-scenes]]
                  (let [scene-dims (scene-dims-by-layout layout)
                        w (:width scene-dims)
-                       h (:height scene-dims)]
-                   
-                   (-> proto-scene
-                     (assoc :children (mapv (partial apply-alpha 1.0) child-scenes)
-                            :aabb (aabb-by-layout layout))
-                     (assoc-in [:renderable :user-data :line-data] [[0 0 0] [w 0 0] [w 0 0] [w h 0] [w h 0] [0 h 0] [0 h 0] [0 0 0]])
-                     clipping/setup-states
-                     sort-scene))))
+                       h (:height scene-dims)
+                       layout-scene (-> proto-scene
+                                      (assoc :children (mapv (partial apply-alpha 1.0) child-scenes)
+                                             :aabb (aabb-by-layout layout))
+                                      (assoc-in [:renderable :user-data :line-data] [[0 0 0] [w 0 0] [w 0 0] [w h 0] [w h 0] [0 h 0] [0 h 0] [0 0 0]])
+                                      clipping/setup-states
+                                      sort-scene)]
+                   [layout layout-scene])))
           child-scenes-by-layout)))
 
 (defn- ->scene-pb-msg [script-resource material-resource adjust-reference background-color max-nodes node-msgs layer-msgs font-msgs texture-msgs layout-msgs spine-scene-msgs particlefx-resource-msgs]
@@ -2208,11 +2213,11 @@
                      (g/connect new-value :scene-by-layout self :scene-by-layout)
                      (g/connect new-value :node-outline self :original-node-outline)
                      (g/connect new-value :layout-msgs self :layout-msgs)))))
-  (property visible-layout g/Str (default (g/constantly ""))
+  (property visible-layout g/Any (default (g/constantly :default))
             (dynamic visible (g/constantly false))
-            (dynamic edit-type (g/fnk [layout-msgs]
+            #_(dynamic edit-type (g/fnk [layout-msgs]
                                       {:type :choicebox
-                                       :options (into {"" "Default"}
+                                       :options (into {:default "Default"}
                                                       (map (fn [l] [(:name l) (:name l)]) layout-msgs))})))
   (input layout-msgs g/Any)
   (input original-resource g/NodeID)
@@ -2345,17 +2350,17 @@
   (output material-shader ShaderLifecycle (gu/passthrough material-shader))
   (input samplers [g/KeywordMap])
   (output samplers [g/KeywordMap] (gu/passthrough samplers))
-  (output aabb-by-layout AABB :cached (g/fnk [scene-dims-by-layout child-scenes-by-layout]
-                                        (into {}
-                                              (map (fn [[layout child-scenes]]
-                                                     (let [scene-dims (scene-dims-by-layout layout)
-                                                           w (:width scene-dims)
-                                                           h (:height scene-dims)
-                                                           scene-aabb (-> (geom/null-aabb)
-                                                                        (geom/aabb-incorporate 0 0 0)
-                                                                        (geom/aabb-incorporate w h 0))]
-                                                       [layout (reduce geom/aabb-union scene-aabb (map :aabb child-scenes))])))
-                                              (merge {:default []} child-scenes-by-layout))))
+  (output aabb-by-layout Layout->AABB :cached (g/fnk [scene-dims-by-layout child-scenes-by-layout]
+                                                (into {}
+                                                      (map (fn [[layout child-scenes]]
+                                                             (let [scene-dims (scene-dims-by-layout layout)
+                                                                   w (:width scene-dims)
+                                                                   h (:height scene-dims)
+                                                                   scene-aabb (-> (geom/null-aabb)
+                                                                                (geom/aabb-incorporate 0 0 0)
+                                                                                (geom/aabb-incorporate w h 0))]
+                                                               [layout (reduce geom/aabb-union scene-aabb (map :aabb child-scenes))])))
+                                                      (merge {:default []} child-scenes-by-layout))))
 
   (output pb-msg g/Any :cached produce-pb-msg)
   (output rt-pb-msg g/Any :cached produce-rt-pb-msg)
@@ -2392,12 +2397,12 @@
                                                          (map (fn [[layout scene]]
                                                                 (let [child-scenes (child-scenes-by-layout layout)
                                                                       scene' (assoc scene :aabb (reduce geom/aabb-union (geom/null-aabb) (keep :aabb child-scenes)))]
-                                                                  [layout scene'))))
+                                                                  [layout scene'])))
                                                          scene-by-layout)))
   (output scene-dims-by-layout g/Any :cached (g/fnk [project-settings #_current-layout display-profiles]
                                                (let [default-width (get project-settings ["display" "width"])
-                                                     defualt-height (get project-settings ["display" "height"])
-                                                     default-dims {:defauly {:width default-width :height default-height}}
+                                                     default-height (get project-settings ["display" "height"])
+                                                     default-dims {:default {:width default-width :height default-height}}
                                                      layout-dims (into {}
                                                                        (map (fn [{:keys [name qualifiers]}]
                                                                               (if-some [qualifier (first qualifiers)]
@@ -3019,7 +3024,7 @@
          (when-let [scene-view (active-scene-view app-view)]
            (let [adapter (ffirst (g/sources-of scene-view :scene-adapter))
                  visible (g/node-value adapter :visible-layout)]
-             {:label (if (empty? visible) "Default" visible)
+             {:label (if (= :default visible) "Default" visible)
               :command :set-gui-layout
               :user-data visible})))
   (options [app-view user-data]
@@ -3027,11 +3032,11 @@
              (when-let [scene-view (active-scene-view app-view)]
                (let [adapter (ffirst (g/sources-of scene-view :scene-adapter))
                      layout-msgs (g/node-value adapter :layout-msgs)
-                     layouts (cons "" (map :name layout-msgs))]
-                 (for [l layouts]
-                   {:label (if (empty? l) "Default" l)
+                     layouts (cons :default (map :name layout-msgs))]
+                 (for [layout layouts]
+                   {:label (if (= :default layout) "Default" layout)
                     :command :set-gui-layout
-                    :user-data l}))))))
+                    :user-data layout}))))))
 
 (ui/extend-menu :toolbar :visibility-settings
                 [{:label :separator}

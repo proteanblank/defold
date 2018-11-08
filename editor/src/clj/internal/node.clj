@@ -1250,7 +1250,7 @@
     `(gt/produce-value ~self-name ~argument ~ctx-name)
 
     :else
-    (assert false (str "A function needs an argument this node can't supply. There is no input, output, or property called " (pr-str argument)))))
+    (assert false (str "Transform " output " in " (:name description) " needs an argument this node can't supply. There is no input, output, or property called " (pr-str argument)))))
 
 (def ^:private jammable? (complement internal-keys))
 
