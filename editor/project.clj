@@ -122,8 +122,8 @@
                                 :omit-source  true
                                 :source-paths ["sidecar"]}
                       :release {:jvm-opts          ["-Ddefold.build=release"]}
-                      :dev     {:injections [(defonce force-toolkit-init (javafx.embed.swing.JFXPanel.))] ; needed by eastwood ...
-                                :plugins           [[jonase/eastwood "0.3.4"]]
+                      :eastwood {:injections [(defonce force-toolkit-init (javafx.embed.swing.JFXPanel.))]}
+                      :dev     {:plugins           [[jonase/eastwood "0.3.4"]]
                                 :eastwoody          {:exclude-namespaces [
                                                                          editor.code.view ; causes Method code too large! transitively in namespaces below, typically via editor.app-view
                                                                          editor.console   
