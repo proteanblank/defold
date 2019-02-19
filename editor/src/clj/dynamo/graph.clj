@@ -371,19 +371,15 @@
       ;; This try-block was an attempt to catch "Code too large" errors when method size exceeded 64kb in the JVM.
       ;; Surprisingly, the addition of the try-block stopped the error from happening, so leaving it here.
       ;; "Problem solved!" lol
-      `(try
-         (do
-           (declare ~symb)
-           ~@type-regs
-           ~@fwd-decls
-           ~@fn-defs
-           (defn ~runtime-definer [] ~node-type-def)
-           (def ~symb (in/register-node-type ~node-key (in/map->NodeTypeImpl (~runtime-definer))))
-           ~@derivations
-           (var ~symb))
-         (catch RuntimeException e#
-           (prn (format "defnode exception while generating code for %s" ~type-name))
-           (throw e#))))))
+      `(do
+         (declare ~symb)
+         ~@type-regs
+         ~@fwd-decls
+         ~@fn-defs
+         (defn ~runtime-definer [] ~node-type-def)
+         (def ~symb (in/register-node-type ~node-key (in/map->NodeTypeImpl (~runtime-definer))))
+         ~@derivations
+         (var ~symb)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Transactions

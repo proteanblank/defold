@@ -1186,33 +1186,32 @@
            (~runtime-fnk-expr arg-forms#)
            (ie/error-aggregate argument-errors# :_node-id ~nodeid-sym :_label ~label))))))
 
+(defn- property-has-default-getter? [description label] (not (get-in description [:property label :value])))
+(defn- property-value-fn-arguments [description label] (get-in description [:property label :value :arguments]))
+
 (defn- collect-base-property-value-form
   [self-name ctx-name nodeid-sym description prop-name]
-  (let [property-definition (get-in description [:property prop-name])
-        default? (not (:value property-definition))]
-    (if default?
-      (with-tracer-calls-form self-name ctx-name prop-name :raw-property
-        (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~prop-name)))
-      (with-tracer-calls-form self-name ctx-name prop-name :property
-        (call-with-error-checked-fnky-arguments-form self-name ctx-name nodeid-sym prop-name description
-                                                     (get-in property-definition [:value :arguments])
-                                                     (check-dry-run-form ctx-name
-                                                                         `(var ~(symbol (dollar-name (:name description) [:property prop-name :value])))
-                                                                         `(constantly nil)))))))
+  (if (property-has-default-getter? description prop-name)
+    (with-tracer-calls-form self-name ctx-name prop-name :raw-property
+      (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~prop-name)))
+    (with-tracer-calls-form self-name ctx-name prop-name :property
+      (call-with-error-checked-fnky-arguments-form self-name ctx-name nodeid-sym prop-name description
+                                                   (property-value-fn-arguments description prop-name)
+                                                   (check-dry-run-form ctx-name
+                                                                       `(var ~(symbol (dollar-name (:name description) [:property prop-name :value])))
+                                                                       `(constantly nil))))))
+
 (defn- collect-property-value-form
-  [self-name ctx-name nodeid-sym description prop]
-  (let [property-definition (get-in description [:property prop])
-        default? (not (:value property-definition))
-        get-expr (if default?
-                   (with-tracer-calls-form self-name ctx-name prop :raw-property
-                     (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~prop)))
-                   (with-tracer-calls-form self-name ctx-name prop :property
-                     (call-with-error-checked-fnky-arguments-form self-name ctx-name nodeid-sym prop description
-                                                                  (get-in property-definition [:value :arguments])
-                                                                  (check-dry-run-form ctx-name
-                                                                                      `(var ~(dollar-name (:name description) [:property prop :value]))
-                                                                                      `(constantly nil)))))]
-    get-expr))
+  [self-name ctx-name nodeid-sym description prop-name]
+  (if (property-has-default-getter? description prop-name)
+    (with-tracer-calls-form self-name ctx-name prop-name :raw-property
+      (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~prop-name)))
+    (with-tracer-calls-form self-name ctx-name prop-name :property
+      (call-with-error-checked-fnky-arguments-form self-name ctx-name nodeid-sym prop-name description
+                                                   (property-value-fn-arguments description prop-name)
+                                                   (check-dry-run-form ctx-name
+                                                                       `(var ~(dollar-name (:name description) [:property prop-name :value]))
+                                                                       `(constantly nil))))))
 
 (defn- fnk-argument-form
   [self-name ctx-name nodeid-sym output description argument]
@@ -1274,17 +1273,14 @@
          ~forms))
     forms))
 
-(defn- property-has-default-getter?       [description label] (not (get-in description [:property label :value])))
 (defn- property-has-no-overriding-output? [description label] (not (desc-has-explicit-output? description label)))
 
 (defn- apply-default-property-shortcut-form [self-name ctx-name property-name description forms]
-  (let [property? (and (desc-has-property? description property-name) (property-has-no-overriding-output? description property-name))
-        default?  (and (property-has-default-getter? description property-name)
-                       (property-has-no-overriding-output? description property-name))]
-    (if default?
-      (with-tracer-calls-form self-name ctx-name property-name :raw-property
-        (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~property-name)))
-      forms)))
+  (if (and (property-has-default-getter? description property-name)
+           (property-has-no-overriding-output? description property-name))
+    (with-tracer-calls-form self-name ctx-name property-name :raw-property
+      (check-dry-run-form ctx-name `(gt/get-property ~self-name (:basis ~ctx-name) ~property-name)))
+    forms))
 
 (defn mark-in-production [ctx node-type-name node-id label]
   (assert (not (contains? (:in-production ctx) [node-id label]))
