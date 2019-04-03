@@ -946,47 +946,51 @@
 
      (g/node-value view-node prop-kw evaluation-context))))
 
+(defn set-properties [view-node undo-grouping values-by-prop-kw]
+  (if (empty? values-by-prop-kw)
+    nil
+    (let [resource-node (g/node-value view-node :resource-node)]
+      (into (prelude-tx-data view-node undo-grouping values-by-prop-kw)
+            (mapcat (fn [[prop-kw value]]
+                      (case prop-kw
+                        (:cursor-ranges :regions)
+                        (g/set-property resource-node prop-kw value)
+
+                        ;; Several actions might have invalidated rows since
+                        ;; we last produced syntax-info. We keep an ever-
+                        ;; growing history of invalidated-rows. Then when
+                        ;; producing syntax-info we find the first invalidated
+                        ;; row by comparing the history of invalidated rows to
+                        ;; what it was at the time of the last call. See the
+                        ;; invalidated-row function for details.
+                        :invalidated-row
+                        (g/update-property resource-node :invalidated-rows conj value)
+
+                        ;; The :indent-type output in the resource node is
+                        ;; cached, but reads from disk unless a value exists
+                        ;; for the :modified-indent-type property.
+                        :indent-type
+                        (g/set-property resource-node :modified-indent-type value)
+
+                        ;; The :lines output in the resource node is uncached.
+                        ;; It reads from disk unless a value exists for the
+                        ;; :modified-lines property. This means only modified
+                        ;; or currently open files are kept in memory.
+                        :lines
+                        (g/set-property resource-node :modified-lines value)
+
+                        ;; All other properties are set on the view node.
+                        (g/set-property view-node prop-kw value))))
+            values-by-prop-kw))))
+
 (defn set-properties!
   "Sets values of properties that are managed by the functions in the code.data module.
   Returns true if any property changed, false otherwise."
   [view-node undo-grouping values-by-prop-kw]
-  (if (empty? values-by-prop-kw)
-    false
-    (let [resource-node (g/node-value view-node :resource-node)]
-      (g/transact
-        (into (prelude-tx-data view-node undo-grouping values-by-prop-kw)
-              (mapcat (fn [[prop-kw value]]
-                        (case prop-kw
-                          (:cursor-ranges :regions)
-                          (g/set-property resource-node prop-kw value)
-
-                          ;; Several actions might have invalidated rows since
-                          ;; we last produced syntax-info. We keep an ever-
-                          ;; growing history of invalidated-rows. Then when
-                          ;; producing syntax-info we find the first invalidated
-                          ;; row by comparing the history of invalidated rows to
-                          ;; what it was at the time of the last call. See the
-                          ;; invalidated-row function for details.
-                          :invalidated-row
-                          (g/update-property resource-node :invalidated-rows conj value)
-
-                          ;; The :indent-type output in the resource node is
-                          ;; cached, but reads from disk unless a value exists
-                          ;; for the :modified-indent-type property.
-                          :indent-type
-                          (g/set-property resource-node :modified-indent-type value)
-
-                          ;; The :lines output in the resource node is uncached.
-                          ;; It reads from disk unless a value exists for the
-                          ;; :modified-lines property. This means only modified
-                          ;; or currently open files are kept in memory.
-                          :lines
-                          (g/set-property resource-node :modified-lines value)
-
-                          ;; All other properties are set on the view node.
-                          (g/set-property view-node prop-kw value))))
-              values-by-prop-kw))
-      true)))
+  (if-let [txs (set-properties view-node undo-grouping values-by-prop-kw)]
+    (do (g/transact txs)
+        true)
+    false))
 
 ;; -----------------------------------------------------------------------------
 ;; Code completion

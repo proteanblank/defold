@@ -123,7 +123,7 @@
 (def properties-view (partial view-of-type properties-view/PropertiesView))
 
 (defn console-view []
-  (-> (view-of-type console/ConsoleNode) (g/targets-of :lines) ffirst))
+  (-> (view-of-type console/ConsoleNode) (g/targets-of :modified-lines) ffirst))
 
 (defn- node-value-type-symbol [node-value-type]
   (symbol (if-some [^Class class (:class (deref node-value-type))]

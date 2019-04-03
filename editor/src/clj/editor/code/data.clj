@@ -66,9 +66,17 @@
       (compare col (.col ^Cursor other))
       (compare-extra-cursor-fields this other))))
 
-(defmethod print-method Cursor [^Cursor c, ^Writer w]
-  (.write w (pr-str (merge {:Cursor [(.row c) (.col c)]}
-                           (dissoc c :row :col)))))
+(defn- cursor-print-data [^Cursor c]
+  (into [(.-row c) (.-col c)]
+        (mapcat identity)
+        (dissoc c :row :col)))
+
+(defmethod print-method Cursor [c, ^Writer w]
+  (.write w "#code/cursor")
+  (print-method (cursor-print-data c) w))
+
+(defn read-cursor [[row col & {:as kvs}]]
+  (map->Cursor (assoc kvs :row row :col col)))
 
 (defn compare-cursor-position
   ^long [^Cursor a ^Cursor b]
@@ -98,11 +106,15 @@
       (compare-extra-cursor-range-fields this other))))
 
 (defmethod print-method CursorRange [^CursorRange cr, ^Writer w]
-  (let [^Cursor from (.from cr)
-        ^Cursor to (.to cr)]
-    (.write w (pr-str (merge {:CursorRange [[(.row from) (.col from)]
-                                            [(.row to) (.col to)]]}
-                             (dissoc cr :from :to))))))
+  (.write w "#code/range")
+  (print-method (into [(cursor-print-data (.-from cr))
+                       (cursor-print-data (.-to cr))]
+                      (mapcat identity)
+                      (dissoc cr :from :to))
+                w))
+
+(defn read-cursor-range [[from to & {:as kvs}]]
+  (map->CursorRange (assoc kvs :from (read-cursor from) :to (read-cursor to))))
 
 (def document-start-cursor (->Cursor 0 0))
 (def document-start-cursor-range (->CursorRange document-start-cursor document-start-cursor))

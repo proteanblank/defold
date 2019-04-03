@@ -14,6 +14,7 @@
            [editor.code.data Cursor CursorRange LayoutInfo Rect]
            [java.util.regex MatchResult]
            [javafx.beans.property SimpleStringProperty]
+           [javafx.beans.value ChangeListener]
            [javafx.scene Parent Scene]
            [javafx.scene.canvas Canvas GraphicsContext]
            [javafx.scene.control Button Tab TabPane TextField]
@@ -233,14 +234,83 @@
 ;; -----------------------------------------------------------------------------
 ;; Setup
 ;; -----------------------------------------------------------------------------
+(defn- contains-ignore-case? [^String str ^String sub]
+  (let [sub-length (.length sub)
+        last (- (.length str) sub-length)]
+    (loop [i 0]
+      (cond
+        (< last i) false
+        (.regionMatches str true i sub 0 sub-length) true
+        :else (recur (inc i))))))
+
+(defn- region-on-line? [region row]
+  (<= (:row (data/cursor-range-start region))
+      row
+      (:row (data/cursor-range-end region))))
+
+(defn- line-regions+rest-regions [regions row dropped-rows]
+  (loop [acc (transient [])
+         [x & xs :as rs] regions]
+    (cond
+      (nil? x)
+      [(persistent! acc) []]
+
+      (region-on-line? x row)
+      (let []
+        (recur (conj! acc (-> x
+                              (update-in [:from :row] - dropped-rows)
+                              (update-in [:to :row] - dropped-rows)))
+               xs))
+
+      :else
+      [(persistent! acc) rs])))
+
+(defn- drop-regions-on-line [regions row]
+  (loop [[x & xs :as rs] regions]
+    (cond
+      (nil? x) []
+      (region-on-line? x row) (recur xs)
+      :else rs)))
+
+(defn- filtered-lines+regions [lines regions filter-term]
+  (if (empty? filter-term)
+    [lines regions]
+    (let [[lines :as ret]
+          (loop [acc-lines (transient [])
+                 acc-regions (transient [])
+                 row 0
+                 dropped-rows 0
+                 [l & ls] lines
+                 rs regions]
+            (if (nil? l)
+              [(persistent! acc-lines) (persistent! acc-regions)]
+              (if (contains-ignore-case? l filter-term)
+                (let [[line-regions rest-regions] (line-regions+rest-regions rs row dropped-rows)]
+                  (recur (conj! acc-lines l)
+                         (reduce conj! acc-regions line-regions)
+                         (inc row)
+                         dropped-rows
+                         ls
+                         rest-regions))
+                (recur acc-lines
+                       acc-regions
+                       (inc row)
+                       (inc dropped-rows)
+                       ls
+                       (drop-regions-on-line rs row)))))]
+      (if (empty? lines)
+        [[""] []]
+        ret))))
 
 (g/defnode ConsoleNode
+  (property filter-term String (default ""))
   (property indent-type r/IndentType (default :two-spaces))
   (property cursor-ranges r/CursorRanges (default [data/document-start-cursor-range]) (dynamic visible (g/constantly false)))
   (property invalidated-rows r/InvalidatedRows (default []) (dynamic visible (g/constantly false)))
-  (property modified-lines r/Lines (default [""]) (dynamic visible (g/constantly false)))
+  (property lines r/Lines (default [""]) (dynamic visible (g/constantly false)))
   (property regions r/Regions (default []) (dynamic visible (g/constantly false)))
-  (output lines r/Lines (gu/passthrough modified-lines)))
+  (property modified-lines r/Lines (default [""]) (dynamic visible (g/constantly false)))
+  (property modified-regions r/Regions (default []) (dynamic visible (g/constantly false))))
 
 (defn- gutter-metrics []
   [44.0 0.0])
@@ -326,8 +396,8 @@
       (g/connect console-node :indent-type view-node :indent-type)
       (g/connect console-node :cursor-ranges view-node :cursor-ranges)
       (g/connect console-node :invalidated-rows view-node :invalidated-rows)
-      (g/connect console-node :lines view-node :lines)
-      (g/connect console-node :regions view-node :regions)))
+      (g/connect console-node :modified-lines view-node :lines)
+      (g/connect console-node :modified-regions view-node :regions)))
   view-node)
 
 (def ^:private line-sub-regions-pattern #"(?<=^|\s|[<\"'`])(\/[^\s>\"'`:]+)(?::?)(\d+)?")
@@ -409,27 +479,62 @@
           props
           (partition-by #(nil? (first %)) entries)))
 
-(defn- repaint-console-view! [view-node workspace on-region-click! elapsed-time]
+(defn- repaint-console-view! [console-node view-node workspace on-region-click! elapsed-time]
   (let [{:keys [clear? entries]} (dequeue-pending! 1000)]
     (when (or clear? (seq entries))
       (let [resource-map (g/node-value workspace :resource-map)
             ^LayoutInfo prev-layout (g/node-value view-node :layout)
-            prev-lines (g/node-value view-node :lines)
-            prev-regions (g/node-value view-node :regions)
+            filter-term (g/node-value console-node :filter-term)
+            prev-lines (g/node-value console-node :lines)
+            prev-regions (g/node-value console-node :regions)
+            prev-modified-lines (g/node-value console-node :modified-lines)
+            prev-modified-regions (g/node-value console-node :modified-regions)
             prev-document-width (if clear? 0.0 (.document-width prev-layout))
             appended-width (data/max-line-width (.glyph prev-layout) (.tab-stops prev-layout) (mapv second entries))
             document-width (max prev-document-width ^double appended-width)
-            was-scrolled-to-bottom? (data/scrolled-to-bottom? prev-layout (count prev-lines))
+            was-scrolled-to-bottom? (data/scrolled-to-bottom? prev-layout (count prev-modified-lines))
             props (append-entries {:lines (if clear? [""] prev-lines)
                                    :regions (if clear? [] prev-regions)}
-                                  entries resource-map on-region-click!)]
-        (view/set-properties! view-node nil
-                              (cond-> (assoc props :document-width document-width)
-                                      was-scrolled-to-bottom? (assoc :scroll-y (data/scroll-to-bottom prev-layout (count (:lines props))))
-                                      clear? (assoc :cursor-ranges [data/document-start-cursor-range])
-                                      clear? (assoc :invalidated-row 0)
-                                      clear? (data/frame-cursor prev-layout))))))
+                                  entries resource-map on-region-click!)
+            modified-props (append-entries {:lines (if clear? [""] prev-modified-lines)
+                                            :regions (if clear? [] prev-modified-regions)}
+                                           (filterv (fn [[_ line]]
+                                                      (contains-ignore-case? line filter-term))
+                                                    entries)
+                                           resource-map
+                                           on-region-click!)]
+        (g/transact
+          [(g/set-property console-node :lines (:lines props))
+           (g/set-property console-node :regions (:regions props))
+           (g/set-property console-node :modified-regions (:regions modified-props))
+           (view/set-properties view-node
+                                nil
+                                (cond-> (assoc (dissoc modified-props :regions) :document-width document-width)
+                                        was-scrolled-to-bottom? (assoc :scroll-y (data/scroll-to-bottom prev-layout (count (:lines modified-props))))
+                                        clear? (assoc :cursor-ranges [data/document-start-cursor-range])
+                                        clear? (assoc :invalidated-row 0)
+                                        clear? (data/frame-cursor prev-layout)))]))))
   (view/repaint-view! view-node elapsed-time {:cursor-visible? false}))
+
+(defn- set-filter-term! [console-node view-node filter-term]
+  (let [lines (g/node-value console-node :lines)
+        regions (g/node-value console-node :regions)
+        ^LayoutInfo prev-layout (g/node-value view-node :layout)
+        width (data/max-line-width (.-glyph prev-layout)
+                                   (.-tab_stops prev-layout)
+                                   lines)
+        [modified-lines modified-regions] (filtered-lines+regions lines regions filter-term)]
+    (g/transact
+      [(g/set-property console-node :filter-term filter-term)
+       (g/set-property console-node :modified-regions modified-regions)
+       (view/set-properties view-node
+                            nil
+                            (-> {:lines modified-lines ;; sets :modified-lines, also needed for frame cursor
+                                 :document-width width
+                                 :highlighted-find-term filter-term
+                                 :cursor-ranges [data/document-start-cursor-range]
+                                 :invalidated-row 0}
+                                (data/frame-cursor prev-layout)))])))
 
 (def ^:private console-grammar
   {:name "Console"
@@ -467,7 +572,8 @@
 (defn make-console! [graph workspace ^Tab console-tab ^GridPane console-grid-pane open-resource-fn]
   (let [^Pane canvas-pane (.lookup console-grid-pane "#console-canvas-pane")
         canvas (Canvas. (.getWidth canvas-pane) (.getHeight canvas-pane))
-        view-node (setup-view! (g/make-node! graph ConsoleNode)
+        console-node (g/make-node! graph ConsoleNode)
+        view-node (setup-view! console-node
                                (g/make-node! graph view/CodeEditorView
                                              :canvas canvas
                                              :canvas-width (.getWidth canvas)
@@ -487,9 +593,10 @@
                                  (let [opts (when-some [row (:row region)]
                                               {:line (inc (long row))})]
                                    (open-resource-fn resource opts))))))
-        repainter (ui/->timer "repaint-console-view" (fn [_ elapsed-time]
-                                                       (when (and (.isSelected console-tab) (not (ui/ui-disabled?)))
-                                                         (repaint-console-view! view-node workspace on-region-click! elapsed-time))))
+        repainter (ui/->timer "repaint-console-view"
+                              (fn [_ elapsed-time]
+                                (when (and (.isSelected console-tab) (not (ui/ui-disabled?)))
+                                  (repaint-console-view! console-node view-node workspace on-region-click! elapsed-time))))
         context-env {:clipboard (Clipboard/getSystemClipboard)
                      :term-field (.lookup tool-bar "#search-console")
                      :view-node view-node}]
@@ -517,7 +624,9 @@
     (ui/context! canvas :console-view context-env nil)
 
     ;; Highlight occurrences of search term.
-    (let [find-term-setter (view/make-property-change-setter view-node :highlighted-find-term)]
+    (let [find-term-setter (reify ChangeListener
+                             (changed [_ _ _ new]
+                               (set-filter-term! console-node view-node new)))]
       (.addListener find-term-property find-term-setter)
 
       ;; Ensure the focus-state property reflects the current input focus state.
