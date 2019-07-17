@@ -63,6 +63,8 @@
                      [com.sun.xml.bind/jaxb-core "2.3.0"]
                      [com.sun.xml.bind/jaxb-impl "2.3.0"]
 
+                     [org.luaj/luaj-jse "3.0.1"]
+
                      [cljfx "1.3.4"]
 
                      [org.openjfx/javafx-base "12"]
@@ -204,5 +206,5 @@
                                                     ;; From https://github.com/clojure-goes-fast/clj-async-profiler/blob/master/README.md
                                                     "-Djdk.attach.allowAttachSelf"   ; Required for attach to running process.
                                                     "-XX:+UnlockDiagnosticVMOptions" ; Required for DebugNonSafepoints.
-                                                    "-XX:+DebugNonSafepoints"]}}     ; Without this, there is a high chance that simple inlined methods will not appear in the profile.
-)
+                                                    "-XX:+DebugNonSafepoints"]}})     ; Without this, there is a high chance that simple inlined methods will not appear in the profile.
+
