@@ -75,16 +75,18 @@
 
   Fn
   (clj->lua [f]
-    (proxy [VarArgFunction] []
-      (invoke [varargs]
-        (let [args (if (instance? LuaValue varargs)
-                     [(lua->clj varargs)]
-                     (lua->clj varargs))]
-          (LuaValue/varargsOf (into-array LuaValue [(clj->lua (apply f args))]))))))
+    f
+    #_(proxy [VarArgFunction] []
+        (invoke [varargs]
+          (let [args (if (instance? LuaValue varargs)
+                       [(lua->clj varargs)]
+                       (lua->clj varargs))]
+            (LuaValue/varargsOf (into-array LuaValue [(clj->lua (apply f args))]))))))
   LuaFunction
   (lua->clj [f]
-    (fn [& args]
-      (lua->clj (.invoke f (LuaValue/varargsOf (into-array LuaValue (mapv clj->lua args))))))))
+    f
+    #_(fn [& args]
+        (lua->clj (.invoke f (LuaValue/varargsOf (into-array LuaValue (mapv clj->lua args))))))))
 
 (defn- set-globals! [^LuaValue globals m]
   (doseq [[k v] m]

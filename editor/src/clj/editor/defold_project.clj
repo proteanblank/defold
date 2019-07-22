@@ -7,6 +7,7 @@
             [editor.code.script-intelligence :as si]
             [editor.collision-groups :as collision-groups]
             [editor.core :as core]
+            [editor.editor-extensions :as editor-extensions]
             [editor.error-reporting :as error-reporting]
             [editor.gl :as gl]
             [editor.handler :as handler]
@@ -430,21 +431,21 @@
 
 (defn select
   ([project resource-node node-ids open-resource-nodes]
-    (assert (every? some? node-ids) "Attempting to select nil values")
-    (let [node-ids (if (seq node-ids)
-                     (-> node-ids distinct vec)
-                     [resource-node])
-          all-selections (-> (g/node-value project :all-selections)
-                           (update-selection open-resource-nodes resource-node node-ids))]
-      (perform-selection project all-selections))))
+   (assert (every? some? node-ids) "Attempting to select nil values")
+   (let [node-ids (if (seq node-ids)
+                    (-> node-ids distinct vec)
+                    [resource-node])
+         all-selections (-> (g/node-value project :all-selections)
+                            (update-selection open-resource-nodes resource-node node-ids))]
+     (perform-selection project all-selections))))
 
 (defn- perform-sub-selection
   ([project all-sub-selections]
-    (g/set-property project :all-sub-selections all-sub-selections)))
+   (g/set-property project :all-sub-selections all-sub-selections)))
 
 (defn sub-select
   ([project resource-node sub-selection open-resource-nodes]
-    (g/update-property project :all-sub-selections update-selection open-resource-nodes resource-node sub-selection)))
+   (g/update-property project :all-sub-selections update-selection open-resource-nodes resource-node sub-selection)))
 
 (defn- remap-selection [m key-m val-fn]
   (reduce (fn [m [old new]]
@@ -579,6 +580,7 @@
   (property all-sub-selections g/Any)
 
   (input script-intelligence g/NodeID :cascade-delete)
+  (input editor-extensions g/NodeID :cascade-delete)
   (input all-selected-node-ids g/Any :array)
   (input all-selected-node-properties g/Any :array)
   (input resources g/Any)
@@ -735,7 +737,9 @@
             (g/transact
               (g/make-nodes graph
                   [script-intelligence si/ScriptIntelligenceNode
-                   project [Project :workspace workspace-id]]
+                   project [Project :workspace workspace-id]
+                   extensions editor-extensions/EditorExtensions]
+                (g/connect extensions :_node-id project :editor-extensions)
                 (g/connect script-intelligence :_node-id project :script-intelligence)
                 (g/connect workspace-id :build-settings project :build-settings)
                 (g/connect workspace-id :resource-list project :resources)

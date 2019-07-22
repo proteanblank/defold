@@ -12,6 +12,7 @@
             [editor.collision-object :as collision-object]
             [editor.cubemap :as cubemap]
             [editor.display-profiles :as display-profiles]
+            [editor.editor-script :as editor-script]
             [editor.factory :as factory]
             [editor.font :as font]
             [editor.game-object :as game-object]
@@ -73,5 +74,6 @@
       (code-script/register-resource-types workspace)
       (code-shader/register-resource-types workspace)
       (code-text-file/register-resource-types workspace)
-      (script-api/register-resource-types workspace))))
+      (script-api/register-resource-types workspace)
+      (editor-script/register-resource-types workspace))))
 

@@ -35,7 +35,7 @@
   (or (data/guess-indent-type (take 512 lines) 4)
       default-indent-type))
 
-(defn read-fn [resource]
+(defn read-fn [resource] ;; TODO use this as output? rly?
   (util/split-lines (slurp resource)))
 
 (defn write-fn [lines]
