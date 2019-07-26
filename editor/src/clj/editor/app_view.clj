@@ -1820,7 +1820,10 @@ If you do not specifically require different script states, consider changing th
                 (render-install-progress! (progress/make "Installing updated libraries..."))
                 (ui/run-later
                   (workspace/install-validated-libraries! workspace library-uris lib-states)
-                  (disk/async-reload! render-install-progress! workspace [] changes-view))))))))))
+                  (disk/async-reload! render-install-progress! workspace [] changes-view
+                                      (fn [success]
+                                        (when success
+                                          (extensions/reload project :library)))))))))))))
 
 (handler/defhandler :add-dependency :global
   (enabled? [] (disk-availability/available?))
@@ -1836,6 +1839,10 @@ If you do not specifically require different script states, consider changing th
 (handler/defhandler :fetch-libraries :global
   (enabled? [] (disk-availability/available?))
   (run [workspace project dashboard-client changes-view] (fetch-libraries workspace project dashboard-client changes-view)))
+
+(handler/defhandler :reload-extensions :global
+  (enabled? [] (disk-availability/available?))
+  (run [project] (extensions/reload project :all)))
 
 (defn- create-and-open-live-update-settings! [app-view changes-view prefs project]
   (let [workspace (project/workspace project)

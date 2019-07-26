@@ -113,13 +113,13 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [workspace]
+  ^Globals [find-resource]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
                (let [^JseBaseLib this this]
                  (prn :find filename)
-                 (some-> (workspace/find-resource workspace (str "/" filename))
+                 (some-> (find-resource (str "/" filename))
                          io/input-stream)
                  #_(proxy-super findResource filename)))))
     (.load (PackageLib.))
@@ -139,13 +139,14 @@
   ^LuaValue [^Globals globals ^String str ^String chunk-name]
   (.call (.load globals str chunk-name)))
 
-(defn read [^String chunk chunk-name]
+(defn read
+  ^Prototype [^String chunk chunk-name]
   (.compile LuaC/instance
             (ByteArrayInputStream. (.getBytes chunk (Charset/forName "UTF-8")))
             chunk-name))
 
-(defn eval [read-chunk env]
-  (.call (LuaClosure. read-chunk env)))
+(defn eval [prototype env]
+  (.call (LuaClosure. prototype env)))
 
 #_(let [globals (make-env)
         closure (lua->clj (.load globals "return function (x) print(x); print(x); print(1 .. 4); print(\"blёp\\nmlep\"); end;"))]

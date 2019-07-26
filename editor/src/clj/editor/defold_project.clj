@@ -398,6 +398,8 @@
                                                 :command :rebundle}
                                                {:label "Fetch Libraries"
                                                 :command :fetch-libraries}
+                                               {:label "Reload Extensions"
+                                                :command :reload-extensions}
                                                {:label "Live Update Settings"
                                                 :command :live-update-settings}
                                                {:label "Sign iOS App..."
@@ -802,6 +804,7 @@
       ;; Prime the auto completion cache
       (g/node-value (script-intelligence project) :lua-completions)
       (cache-save-data! populated-project)
+      (editor-extensions/reload project :all)
       populated-project)))
 
 (defn resource-setter [evaluation-context self old-value new-value & connections]
