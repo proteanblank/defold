@@ -303,6 +303,18 @@
             (.setFont gc font)
             (.setFill gc gutter-eval-error-color)
             (.fillText gc "!" text-right text-y))
+
+          :extension-out
+          (let [text-y (+ ascent line-y)]
+            (.setFont gc font)
+            (.setFill gc gutter-eval-expression-color)
+            (.fillText gc "⚙" text-right text-y))
+
+          :extension-err
+          (let [text-y (+ ascent line-y)]
+            (.setFont gc font)
+            (.setFill gc gutter-eval-error-color)
+            (.fillText gc "⚙" text-right text-y))
           nil)))))
 
 (deftype ConsoleGutterView []

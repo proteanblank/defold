@@ -1,11 +1,18 @@
 (ns editor.luart
+  (:refer-clojure :exclude [read eval])
   (:require [clojure.string :as string]
             [editor.debugging.mobdebug :as mobdebug]
-            [clojure.java.io :as io])
-  (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction]
+            [clojure.java.io :as io]
+            [editor.console :as console]
+            [editor.workspace :as workspace])
+  (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype]
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
-           [org.luaj.vm2.lib VarArgFunction]
-           [org.luaj.vm2.lib.jse JsePlatform]))
+           [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
+           [org.luaj.vm2.lib.jse JsePlatform JseBaseLib JseMathLib JseIoLib JseOsLib]
+           [java.io PrintStream BufferedWriter Writer PipedInputStream PipedOutputStream BufferedReader InputStreamReader OutputStream ByteArrayInputStream]
+           [org.apache.commons.io.output WriterOutputStream]
+           [org.luaj.vm2.compiler LuaC]
+           [java.nio.charset Charset]))
 
 (set! *warn-on-reflection* true)
 
@@ -76,32 +83,70 @@
   Fn
   (clj->lua [f]
     f
-    #_(proxy [VarArgFunction] []
-        (invoke [varargs]
-          (let [args (if (instance? LuaValue varargs)
-                       [(lua->clj varargs)]
-                       (lua->clj varargs))]
-            (LuaValue/varargsOf (into-array LuaValue [(clj->lua (apply f args))]))))))
+    (proxy [VarArgFunction] []
+      (invoke [varargs]
+        (let [args (if (instance? LuaValue varargs)
+                     [(lua->clj varargs)]
+                     (lua->clj varargs))]
+          (LuaValue/varargsOf (into-array LuaValue [(clj->lua (apply f args))]))))))
   LuaFunction
   (lua->clj [f]
-    f
-    #_(fn [& args]
-        (lua->clj (.invoke f (LuaValue/varargsOf (into-array LuaValue (mapv clj->lua args))))))))
+    f))
 
 (defn- set-globals! [^LuaValue globals m]
   (doseq [[k v] m]
     (.set globals (clj->lua k) (clj->lua v))))
 
-#_(let [globals (JsePlatform/standardGlobals)
-        closure (lua->clj (.load globals "print(\"top-level print!\")"))]
-    (closure)
-    (closure))
+(defn- line-print-stream [f]
+  (let [sb (StringBuilder.)]
+    (PrintStream.
+      (WriterOutputStream.
+        (PrintWriter-on #(doseq [^char ch %]
+                           (if (= \newline ch)
+                             (let [str (.toString sb)]
+                               (.delete sb 0 (.length sb))
+                               (f str))
+                             (.append sb ch)))
+                        nil)
+        "UTF-8")
+      true
+      "UTF-8")))
 
-#_(let [globals (JsePlatform/debugGlobals)
-        closure (lua->clj (.load globals "return require('_unpack._defold.debugger.edn').encode(_G);"))]
-    (mobdebug/lua-value->structure-string (#'mobdebug/decode-serialized-data (closure))))
+(defn make-env
+  ^Globals [workspace]
+  (doto (Globals.)
+    (.load (proxy [JseBaseLib] []
+             (findResource [filename]
+               (let [^JseBaseLib this this]
+                 (prn :find filename)
+                 (some-> (workspace/find-resource workspace (str "/" filename))
+                         io/input-stream)
+                 #_(proxy-super findResource filename)))))
+    (.load (PackageLib.))
+    (.load (Bit32Lib.))
+    (.load (TableLib.))
+    (.load (StringLib.))
+    (.load (CoroutineLib.))
+    (.load (JseMathLib.))
+    (.load (JseIoLib.))
+    (.load (JseOsLib.))
+    (LoadState/install)
+    (LuaC/install)
+    (-> (.-STDOUT) (set! (line-print-stream #(console/append-console-entry! :extension-out %))))
+    (-> (.-STDERR) (set! (line-print-stream #(console/append-console-entry! :extension-err %))))))
 
-#_(let [globals (doto (JsePlatform/standardGlobals)
-                  (set-globals! {:pprint clojure.pprint/pprint}))
-        closure (lua->clj (.load globals "return function (x) pprint(x); end;"))]
-    ((closure) {[[:a]] :b}))
+(defn evaluate
+  ^LuaValue [^Globals globals ^String str ^String chunk-name]
+  (.call (.load globals str chunk-name)))
+
+(defn read [^String chunk chunk-name]
+  (.compile LuaC/instance
+            (ByteArrayInputStream. (.getBytes chunk (Charset/forName "UTF-8")))
+            chunk-name))
+
+(defn eval [read-chunk env]
+  (.call (LuaClosure. read-chunk env)))
+
+#_(let [globals (make-env)
+        closure (lua->clj (.load globals "return function (x) print(x); print(x); print(1 .. 4); print(\"blёp\\nmlep\"); end;"))]
+    (.call (.call closure) (clj->lua {[[:a]] :b})))

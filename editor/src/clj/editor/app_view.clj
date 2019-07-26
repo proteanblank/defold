@@ -13,6 +13,7 @@
             [editor.dialogs :as dialogs]
             [editor.disk :as disk]
             [editor.disk-availability :as disk-availability]
+            [editor.editor-extensions :as extensions]
             [editor.engine :as engine]
             [editor.engine.build-errors :as engine-build-errors]
             [editor.error-reporting :as error-reporting]
@@ -1776,7 +1777,9 @@ If you do not specifically require different script states, consider changing th
                            (fn [successful?]
                              (when successful?
                                (if (some-> output-directory .isDirectory)
-                                 (ui/open-file output-directory)
+                                 (do
+                                   (ui/open-file output-directory)
+                                   (extensions/execute project "on_bundle_complete" {:platform platform}))
                                  (dialogs/make-info-dialog
                                    {:title "Bundle Failed"
                                     :icon :icon/triangle-error
