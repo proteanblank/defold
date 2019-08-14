@@ -113,7 +113,7 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [find-resource]
+  ^Globals [find-resource extra-globals]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
@@ -133,7 +133,8 @@
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(console/append-console-entry! :extension-out %))))
-    (-> (.-STDERR) (set! (line-print-stream #(console/append-console-entry! :extension-err %))))))
+    (-> (.-STDERR) (set! (line-print-stream #(console/append-console-entry! :extension-err %))))
+    (set-globals! extra-globals)))
 
 (defn evaluate
   ^LuaValue [^Globals globals ^String str ^String chunk-name]
