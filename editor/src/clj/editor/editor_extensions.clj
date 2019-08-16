@@ -6,8 +6,7 @@
             [clojure.string :as string]
             [schema.core :as s]
             [editor.workspace :as workspace]
-            [editor.resource :as resource]
-            [editor.defold-project :as project])
+            [editor.resource :as resource])
   (:import [org.luaj.vm2 LuaFunction LuaValue LuaError]))
 
 (set! *warn-on-reflection* true)
@@ -140,6 +139,35 @@
                             (get-in [:ext-map step])))]
           (g/transact txs)
           nil)))))
+
+(defn- exec [project fn-name opts]
+  (g/with-auto-evaluation-context ec
+    (let [^LuaValue lua-opts (luart/clj->lua opts)]
+      (binding [*execution-context* {:project project :ec ec}]
+        (into []
+              (keep
+                (fn [^LuaFunction f]
+                  (try
+                    (luart/lua->clj (.call f lua-opts))
+                    (catch LuaError e
+                      (doseq [l (string/split-lines (.getMessage e))]
+                        (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
+              (-> project
+                  (g/node-value :editor-extensions)
+                  (g/user-data :state)
+                  (get-in [:ext-map fn-name])))))))
+
+(defn asset-pane-context-menu-items [project resource-path]
+  (into []
+        (comp
+          cat
+          (map (fn [[name lua-closure]]
+                 {:name name :callback lua-closure})))
+        (exec project "get_assets_pane_context_menu_items" {:path resource-path})))
+
+
+#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
+    (asset-pane-context-menu-items project "/main/blep.json"))
 
 #_(let [x (first (filter #(g/node-instance? editor.code.resource/CodeEditorResourceNode %) (g/node-ids (g/graph 1))))]
     (dev/node-labels x))

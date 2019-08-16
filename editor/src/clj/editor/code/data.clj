@@ -493,21 +493,29 @@
   (let [max-line-number-width (Math/ceil (* ^double (char-width glyph-metrics \0) (count (str source-line-count))))]
     [(+ gutter-margin max-line-number-width gutter-margin) gutter-margin]))
 
+(defn- limit-scroll
+  ^double [^double scroll-limit ^double scroll]
+  (min 0.0 (max scroll scroll-limit)))
+
 (defn layout-info
   ^LayoutInfo [canvas-width canvas-height document-width scroll-x scroll-y lines gutter-width gutter-margin glyph-metrics tab-spaces visible-minimap?]
   (let [^double line-height (line-height glyph-metrics)
-        dropped-line-count (long (/ ^double scroll-y (- line-height)))
-        scroll-y-remainder (double (mod ^double scroll-y (- line-height)))
-        drawn-line-count (long (Math/ceil (/ ^double (- ^double canvas-height scroll-y-remainder) line-height)))
-        line-numbers-rect (->Rect ^double gutter-margin 0.0 (- ^double gutter-width (* 2.0 ^double gutter-margin)) canvas-height)
         excluding-gutter-width (- ^double canvas-width ^double gutter-width)
         minimap-width (if visible-minimap? (min (Math/ceil (/ excluding-gutter-width 9.0)) 150.0) 0.0)
+        canvas-rect-width (- excluding-gutter-width minimap-width)
+        line-count (count lines)
+        scroll-x (limit-scroll (- canvas-rect-width document-width) scroll-x)
+        scroll-y (limit-scroll (- canvas-height (* line-height line-count)) scroll-y)
+        dropped-line-count (long (/ scroll-y (- line-height)))
+        scroll-y-remainder (double (mod scroll-y (- line-height)))
+        drawn-line-count (long (Math/ceil (/ ^double (- ^double canvas-height scroll-y-remainder) line-height)))
+        line-numbers-rect (->Rect ^double gutter-margin 0.0 (- ^double gutter-width (* 2.0 ^double gutter-margin)) canvas-height)
         minimap-left (- ^double canvas-width minimap-width)
         minimap-rect (->Rect minimap-left 0.0 minimap-width canvas-height)
-        canvas-rect (->Rect ^double gutter-width 0.0 (- excluding-gutter-width minimap-width) canvas-height)
+        canvas-rect (->Rect ^double gutter-width 0.0 canvas-rect-width canvas-height)
         tab-stops (tab-stops glyph-metrics tab-spaces)
         scroll-tab-x-rect (scroll-tab-x-rect canvas-rect document-width scroll-x)
-        scroll-tab-y-rect (scroll-tab-y-rect minimap-rect line-height (count lines) dropped-line-count scroll-y-remainder)]
+        scroll-tab-y-rect (scroll-tab-y-rect minimap-rect line-height line-count dropped-line-count scroll-y-remainder)]
     (->LayoutInfo line-numbers-rect
                   canvas-rect
                   minimap-rect
@@ -966,10 +974,6 @@
         document-height (* line-count line-height)
         canvas-height (.h ^Rect (.canvas layout))]
     (- canvas-height document-height)))
-
-(defn- limit-scroll
-  ^double [^double scroll-limit ^double scroll]
-  (min 0.0 (max scroll scroll-limit)))
 
 (defn limit-scroll-x
   ^double [^LayoutInfo layout ^double scroll-x]
