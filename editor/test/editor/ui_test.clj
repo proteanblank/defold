@@ -2,7 +2,6 @@
   (:require [clojure.test :refer :all]
             [dynamo.graph :as g]
             [editor.handler :as handler]
-            [editor.menu :as menu]
             [editor.ui :as ui]
             [support.test-support :as test-support])
   (:import [javafx.scene Scene]
@@ -17,8 +16,7 @@
     stage))
 
 (defn fixture [f]
-  (with-redefs [menu/*menus* (atom {})
-                handler/*handlers* (atom {})
+  (with-redefs [handler/state-atom (atom {:handlers {} :menus {}})
                 ui/*main-stage* (atom (ui/run-now (make-fake-stage)))]
     (f)))
 
@@ -33,11 +31,11 @@
                   [{:label "Save"}])
   (ui/extend-menu ::quit-menu ::new
                   [{:label "Quit"}])
-  (is (= (#'menu/realize-menu ::menubar) [{:label "File"
-                                           :children [{:label "New"
-                                                       :id ::new}
-                                                      {:label "Save"}
-                                                      {:label "Quit"}]}])))
+  (is (= (handler/realize-menu ::menubar) [{:label "File"
+                                            :children [{:label "New"
+                                                        :id ::new}
+                                                       {:label "Save"}
+                                                       {:label "Quit"}]}])))
 
 (defrecord TestSelectionProvider [selection]
   handler/SelectionProvider
@@ -47,7 +45,7 @@
 
 (defn- make-menu-items [scene menu-id command-context]
   (g/with-auto-evaluation-context evaluation-context
-    (#'ui/make-menu-items scene (#'menu/realize-menu menu-id) [command-context] {} evaluation-context)))
+    (#'ui/make-menu-items scene (handler/realize-menu menu-id) [command-context] {} evaluation-context)))
 
 (deftest menu-test
   (test-support/with-clean-system

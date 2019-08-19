@@ -7,7 +7,8 @@
 
 (set! *warn-on-reflection* true)
 
-(defonce ^:dynamic *handlers* (atom {}))
+(defonce state-atom (atom {:handlers {} :menus {}}))
+
 (defonce ^:dynamic *adapters* nil)
 
 (defprotocol SelectionProvider
@@ -29,19 +30,25 @@
 
 ; TODO: Validate arguments for all functions and log appropriate message
 
+(defn reg-handler!
+  ([id context fns]
+   (reg-handler! id (keyword (name id)) context fns))
+  ([id command context fns]
+   (swap! state-atom assoc-in [:handlers [command context] id] {:command command
+                                                                :context context
+                                                                :fns fns})))
+
 (defmacro defhandler [command context & body]
   (let [qname (keyword (str *ns*) (name command))
         fns (->> body
               (mapcat (fn [[fname fargs & fbody]]
                         [(keyword fname) `(fnk ~fargs ~@fbody)]))
               (apply hash-map))]
-    `(swap! *handlers* assoc-in [[~command ~context] ~qname] {:command ~command
-                                                              :context ~context
-                                                              :fns ~fns})))
+    `(reg-handler! ~qname ~command ~context ~fns)))
 
 (defn available-commands
   []
-  (map first (keys @*handlers*)))
+  (map first (keys (:handlers @state-atom))))
 
 (defn- get-fnk [handler fsym]
   (get-in handler [:fns fsym]))
@@ -81,7 +88,7 @@
     (some (fn [handler]
             (when (invoke-fnk handler :active? ctx true)
               handler))
-          (vals (get @*handlers* [command ctx-name])))))
+          (vals (get-in @state-atom [:handlers [command ctx-name]])))))
 
 (defn- get-active [command command-contexts user-data evaluation-context]
   (some (fn [ctx]
@@ -127,6 +134,10 @@
   ([command command-contexts user-data evaluation-context]
    (get-active command command-contexts user-data evaluation-context)))
 
+#_(reg-handler! :boop/doop :doop :global {:run (fnk [woot] (prn woot))})
+
+#_(run (active :doop [{:name :global :env {:woot :shoot}}] {}))
+
 (defn- context-selections [context]
   (if-let [s (get-in context [:env :selection])]
     [s]
@@ -162,6 +173,31 @@
                        (conj result ctx))]
           (recur (rest selection-contexts) result))
         result))))
+
+(defn extend-menu! [id location menu]
+  (swap! state-atom update-in [:menus id] (comp distinct concat) (list {:location location :menu menu})))
+
+(defn- collect-menu-extensions []
+  (->>
+    (flatten (vals (:menus @state-atom)))
+    (filter :location)
+    (reduce (fn [acc x] (update-in acc [(:location x)] concat (:menu x))) {})))
+
+(defn- do-realize-menu [menu exts]
+  (->> menu
+       (mapv (fn [x] (if (:children x)
+                       (update-in x [:children] do-realize-menu exts)
+                       x)))
+       (mapcat (fn [x]
+                 (if (and (contains? x :id) (contains? exts (:id x)))
+                   (into [x] (do-realize-menu (get exts (:id x)) exts))
+                   [x])))
+       vec))
+
+(defn realize-menu [id]
+  (let [exts (collect-menu-extensions)
+        menu (:menu (some (fn [x] (and (nil? (:location x)) x)) (get-in @state-atom [:menus id])))]
+    (do-realize-menu menu exts)))
 
 (defn adapt [selection t]
   (if (empty? selection)

@@ -9,7 +9,6 @@
             [editor.jfx :as jfx]
             [editor.progress :as progress]
             [editor.math :as math]
-            [editor.menu :as menu]
             [editor.util :as eutil]
             [internal.util :as util]
             [service.log :as log]
@@ -1168,7 +1167,7 @@
      ::not-active)))
 
 (defn extend-menu [id location menu]
-  (menu/extend-menu id location menu))
+  (handler/extend-menu! id location menu))
 
 (defn- make-desc [control menu-id]
   {:control control
@@ -1307,7 +1306,7 @@
     (let [node ^Node (.getTarget event)
           scene ^Scene (.getScene node)
           menu-items (g/with-auto-or-fake-evaluation-context evaluation-context
-                       (make-menu-items scene (menu/realize-menu menu-id) (contexts scene false) (or (user-data scene :command->shortcut) {}) evaluation-context))
+                       (make-menu-items scene (handler/realize-menu menu-id) (contexts scene false) (or (user-data scene :command->shortcut) {}) evaluation-context))
           cm (make-context-menu menu-items)]
       (doto (.getItems cm)
         (refresh-separator-visibility)
@@ -1627,7 +1626,7 @@
 (declare refresh)
 
 (defn- refresh-toolbar [td command-contexts evaluation-context]
- (let [menu (menu/realize-menu (:menu-id td))
+ (let [menu (handler/realize-menu (:menu-id td))
        ^Pane control (:control td)
        scene (.getScene control)]
    (when (and (some? scene)
@@ -1747,7 +1746,7 @@
         root (.getRoot scene)]
     (when-let [md (user-data root ::menubar)]
       (let [^MenuBar menu-bar (:control md)
-            menu (menu/realize-menu (:menu-id md))]
+            menu (handler/realize-menu (:menu-id md))]
         (cond
           (refresh-menubar? menu-bar menu visible-command-contexts)
           (refresh-menubar! menu-bar menu visible-command-contexts command->shortcut evaluation-context)
