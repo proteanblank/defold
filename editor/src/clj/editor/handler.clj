@@ -177,17 +177,22 @@
 (defn extend-menu! [id location menu]
   (swap! state-atom update-in [:menus id] (comp distinct concat) (list {:location location :menu menu})))
 
-(defn- collect-menu-extensions []
-  (->>
-    (flatten (vals (:menus @state-atom)))
-    (filter :location)
-    (reduce (fn [acc x] (update-in acc [(:location x)] concat (:menu x))) {})))
+(defn- collect-menu-extensions [menus]
+  (->> menus
+       vals
+       flatten
+       (filter :location)
+       (reduce
+         (fn [acc x]
+           (update-in acc [(:location x)] concat (:menu x)))
+         {})))
 
 (defn- do-realize-menu [menu exts]
   (->> menu
-       (mapv (fn [x] (if (:children x)
-                       (update-in x [:children] do-realize-menu exts)
-                       x)))
+       (mapv (fn [x]
+               (if (:children x)
+                 (update-in x [:children] do-realize-menu exts)
+                 x)))
        (mapcat (fn [x]
                  (if (and (contains? x :id) (contains? exts (:id x)))
                    (into [x] (do-realize-menu (get exts (:id x)) exts))
@@ -195,8 +200,12 @@
        vec))
 
 (defn realize-menu [id]
-  (let [exts (collect-menu-extensions)
-        menu (:menu (some (fn [x] (and (nil? (:location x)) x)) (get-in @state-atom [:menus id])))]
+  (let [menus (:menus @state-atom)
+        exts (collect-menu-extensions menus)
+        menu (->> (get menus id)
+                  (some (fn [x]
+                          (and (nil? (:location x)) x)))
+                  :menu)]
     (do-realize-menu menu exts)))
 
 (defn adapt [selection t]
