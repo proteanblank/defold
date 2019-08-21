@@ -9,7 +9,7 @@
   (:import [clojure.lang Keyword]))
 
 (defn fixture [f]
-  (with-redefs [handler/state-atom (atom {:handlers {} :menus {}})]
+  (with-redefs [handler/state-atom (atom {})]
    (f)))
 
 (use-fixtures :each fixture)
@@ -332,9 +332,9 @@
                      :children [{:label "Erase Tile"}]}])
 
 (deftest main-menu
-  (with-redefs [handler/state-atom (atom {:handlers {} :menus {}})]
-    (handler/extend-menu! ::menubar nil main-menu-data)
-    (handler/extend-menu! ::menubar ::edit scene-menu-data)
-    (handler/extend-menu! ::menubar ::scene-end tile-map-data)
+  (with-redefs [handler/state-atom (atom {})]
+    (handler/register-menu! ::menubar main-menu-data)
+    (handler/register-menu! ::edit scene-menu-data)
+    (handler/register-menu! ::scene-end tile-map-data)
     (let [m (handler/realize-menu ::menubar)]
       (is (some? (get-in m [2 :children]))))))

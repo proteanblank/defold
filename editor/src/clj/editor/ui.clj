@@ -1166,9 +1166,6 @@
        (execute-command command-contexts command user-data))
      ::not-active)))
 
-(defn extend-menu [id location menu]
-  (handler/extend-menu! id location menu))
-
 (defn- make-desc [control menu-id]
   {:control control
    :menu-id menu-id})
@@ -1300,13 +1297,13 @@
   (defn set-show-relative-to-window! [context-menu x]
     (.invoke method context-menu (into-array Object [(boolean x)]))))
 
-(defn- show-context-menu! [menu-id ^ContextMenuEvent event]
+(defn- show-context-menu! [menu-location ^ContextMenuEvent event]
   (when-not (.isConsumed event)
     (.consume event)
     (let [node ^Node (.getTarget event)
           scene ^Scene (.getScene node)
           menu-items (g/with-auto-or-fake-evaluation-context evaluation-context
-                       (make-menu-items scene (handler/realize-menu menu-id) (contexts scene false) (or (user-data scene :command->shortcut) {}) evaluation-context))
+                       (make-menu-items scene (handler/realize-menu menu-location) (contexts scene false) (or (user-data scene :command->shortcut) {}) evaluation-context))
           cm (make-context-menu menu-items)]
       (doto (.getItems cm)
         (refresh-separator-visibility)
@@ -1316,19 +1313,19 @@
       (set-show-relative-to-window! cm true)
       (.show cm node (.getScreenX event) (.getScreenY event)))))
 
-(defn register-context-menu [^Control control menu-id]
+(defn register-context-menu [^Control control menu-location]
   (.addEventHandler control ContextMenuEvent/CONTEXT_MENU_REQUESTED
     (event-handler event
-      (show-context-menu! menu-id event))))
+      (show-context-menu! menu-location event))))
 
 (defn- event-targets-tab? [^Event event]
   (some? (closest-node-with-style "tab" (.getTarget event))))
 
-(defn register-tab-pane-context-menu [^TabPane tab-pane menu-id]
+(defn register-tab-pane-context-menu [^TabPane tab-pane menu-location]
   (.addEventHandler tab-pane ContextMenuEvent/CONTEXT_MENU_REQUESTED
     (event-handler event
       (when (event-targets-tab? event)
-        (show-context-menu! menu-id event)))))
+        (show-context-menu! menu-location event)))))
 
 (defn disable-menu-alt-key-mnemonic!
   "On Windows, the bare Alt KEY_PRESSED event causes the input focus to move to the menu bar.

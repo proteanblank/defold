@@ -16,21 +16,21 @@
     stage))
 
 (defn fixture [f]
-  (with-redefs [handler/state-atom (atom {:handlers {} :menus {}})
+  (with-redefs [handler/state-atom (atom {})
                 ui/*main-stage* (atom (ui/run-now (make-fake-stage)))]
     (f)))
 
 (use-fixtures :each fixture)
 
 (deftest extend-menu-test
-  (ui/extend-menu ::menubar nil
-                  [{:label "File"
-                    :children [ {:label "New"
-                                 :id ::new}]}])
-  (ui/extend-menu ::save-menu ::new
-                  [{:label "Save"}])
-  (ui/extend-menu ::quit-menu ::new
-                  [{:label "Quit"}])
+  (handler/register-menu! ::menubar
+    [{:label "File"
+      :children [{:label "New"
+                  :id ::new}]}])
+  (handler/register-menu! ::save-menu ::new
+    [{:label "Save"}])
+  (handler/register-menu! ::quit-menu ::new
+    [{:label "Quit"}])
   (is (= (handler/realize-menu ::menubar) [{:label "File"
                                             :children [{:label "New"
                                                         :id ::new}
@@ -49,13 +49,13 @@
 
 (deftest menu-test
   (test-support/with-clean-system
-    (ui/extend-menu ::my-menu nil
-                    [{:label "File"
-                      :children [{:label "Open"
-                                  :id ::open
-                                  :command :open}
-                                 {:label "Save"
-                                  :command :save}]}])
+    (handler/register-menu! ::my-menu
+      [{:label "File"
+        :children [{:label "Open"
+                    :id ::open
+                    :command :open}
+                   {:label "Save"
+                    :command :save}]}])
 
     (handler/defhandler :open :global
         (enabled? [selection] true)
@@ -77,9 +77,9 @@
 
 (deftest options-menu-test
   (test-support/with-clean-system
-    (ui/extend-menu ::my-menu nil
-                    [{:label "Add"
-                      :command :add}])
+    (handler/register-menu! ::my-menu
+      [{:label "Add"
+        :command :add}])
 
     (handler/defhandler :add :global
       (run [user-data] user-data)
@@ -99,10 +99,10 @@
 (deftest toolbar-test
   (ui/run-now
     (test-support/with-clean-system
-      (ui/extend-menu ::my-menu nil
-                      [{:label "Open"
-                        :command :open
-                        :id ::open}])
+      (handler/register-menu! ::my-menu
+        [{:label "Open"
+          :command :open
+          :id ::open}])
 
       (handler/defhandler :open :global
         (enabled? [selection] true)
@@ -126,21 +126,21 @@
           (is (= 1 (count c1) (count c2)))
           (is (= (.get c1 0) (.get c2 0))))
 
-        (ui/extend-menu ::extra ::open
-                        [{:label "Save"
-                          :command :save}])
+        (handler/register-menu! ::extra ::open
+          [{:label "Save"
+            :command :save}])
         (ui/refresh scene)
         (is (= 2 (count (.getChildren root))))))))
 
 (deftest menubar-test
   (ui/run-now
     (test-support/with-clean-system
-      (ui/extend-menu ::my-menu nil
-                      [{:label "File"
-                        :children
-                        [{:label "Open"
-                          :id ::open
-                          :command :open}]}])
+      (handler/register-menu! ::my-menu
+        [{:label "File"
+          :children
+          [{:label "Open"
+            :id ::open
+            :command :open}]}])
 
       (handler/defhandler :open :global
         (enabled? [selection] true)
@@ -163,9 +163,9 @@
               c2 (do (ui/refresh scene) (.getItems (first (.getMenus menubar))))]
           (is (= 1 (count c1) (count c2)))
           (is (= (.get c1 0) (.get c2 0))))
-        (ui/extend-menu ::extra ::open
-                        [{:label "Save"
-                          :command :save}])
+        (handler/register-menu! ::extra ::open
+          [{:label "Save"
+            :command :save}])
         (ui/refresh scene)
         (let [c1 (do (ui/refresh scene) (.getItems (first (.getMenus menubar))))
               c2 (do (ui/refresh scene) (.getItems (first (.getMenus menubar))))]

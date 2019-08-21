@@ -379,33 +379,33 @@
                  [:linux   "Linux Application..."]
                  [:html5   "HTML5 Application..."]])))
 
-(ui/extend-menu ::menubar :editor.app-view/view
-                [{:label "Project"
-                  :id ::project
-                  :children (vec (remove nil? [{:label "Build"
-                                                :command :build}
-                                               {:label "Rebuild"
-                                                :command :rebuild}
-                                               {:label "Build HTML5"
-                                                :command :build-html5}
-                                               {:label "Bundle"
-                                                :children (mapv (fn [[platform label]]
-                                                                  {:label label
-                                                                   :command :bundle
-                                                                   :user-data {:platform platform}})
-                                                                bundle-targets)}
-                                               {:label "Rebundle"
-                                                :command :rebundle}
-                                               {:label "Fetch Libraries"
-                                                :command :fetch-libraries}
-                                               {:label "Reload Extensions"
-                                                :command :reload-extensions}
-                                               {:label "Live Update Settings"
-                                                :command :live-update-settings}
-                                               {:label "Sign iOS App..."
-                                                :command :sign-ios-app}
-                                               {:label :separator
-                                                :id ::project-end}]))}])
+(handler/register-menu! ::menubar :editor.app-view/view
+  [{:label "Project"
+    :id ::project
+    :children [{:label "Build"
+                :command :build}
+               {:label "Rebuild"
+                :command :rebuild}
+               {:label "Build HTML5"
+                :command :build-html5}
+               {:label "Bundle"
+                :children (mapv (fn [[platform label]]
+                                  {:label label
+                                   :command :bundle
+                                   :user-data {:platform platform}})
+                                bundle-targets)}
+               {:label "Rebundle"
+                :command :rebundle}
+               {:label "Fetch Libraries"
+                :command :fetch-libraries}
+               {:label "Reload Extensions"
+                :command :reload-extensions}
+               {:label "Live Update Settings"
+                :command :live-update-settings}
+               {:label "Sign iOS App..."
+                :command :sign-ios-app}
+               {:label :separator
+                :id ::project-end}]}])
 
 (defn- update-selection [s open-resource-nodes active-resource-node selection-value]
   (->> (assoc s active-resource-node selection-value)

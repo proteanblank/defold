@@ -369,25 +369,25 @@
                    (doto (Ellipse. 3.0 3.0)
                      (.setId "active-indicator"))])))
 
-(ui/extend-menu :toolbar nil
-                [{:id :select
-                  :icon "icons/45/Icons_T_01_Select.png"
-                  :command :select-tool}
-                 {:id :move
-                  :icon "icons/45/Icons_T_02_Move.png"
-                  :command :move-tool}
-                 {:id :rotate
-                  :icon "icons/45/Icons_T_03_Rotate.png"
-                  :command :rotate-tool}
-                 {:id :scale
-                  :icon "icons/45/Icons_T_04_Scale.png"
-                  :command :scale-tool}
-                 {:id :perspective-camera
-                  :graphic-fn (partial make-svg-icon-graphic perspective-icon-svg-path)
-                  :command :toggle-perspective-camera}
-                 {:id :visibility-settings
-                  :graphic-fn make-visibility-settings-graphic
-                  :command :show-visibility-settings}])
+(handler/register-menu! :toolbar
+  [{:id :select
+    :icon "icons/45/Icons_T_01_Select.png"
+    :command :select-tool}
+   {:id :move
+    :icon "icons/45/Icons_T_02_Move.png"
+    :command :move-tool}
+   {:id :rotate
+    :icon "icons/45/Icons_T_03_Rotate.png"
+    :command :rotate-tool}
+   {:id :scale
+    :icon "icons/45/Icons_T_04_Scale.png"
+    :command :scale-tool}
+   {:id :perspective-camera
+    :graphic-fn (partial make-svg-icon-graphic perspective-icon-svg-path)
+    :command :toggle-perspective-camera}
+   {:id :visibility-settings
+    :graphic-fn make-visibility-settings-graphic
+    :command :show-visibility-settings}])
 
 (def ^:const prefs-window-dimensions "window-dimensions")
 (def ^:const prefs-split-positions "split-positions")
@@ -1118,153 +1118,153 @@ If you do not specifically require different script states, consider changing th
 (handler/defhandler :reload-stylesheet :global
   (run [] (ui/reload-root-styles!)))
 
-(ui/extend-menu ::menubar nil
-                [{:label "File"
-                  :id ::file
-                  :children [{:label "New..."
-                              :id ::new
-                              :command :new-file}
-                             {:label "Open"
-                              :id ::open
-                              :command :open}
-                             {:label "Synchronize..."
-                              :id ::synchronize
-                              :command :synchronize}
-                             {:label "Save All"
-                              :id ::save-all
-                              :command :save-all}
-                             {:label :separator}
-                             {:label "Open Assets..."
-                              :command :open-asset}
-                             {:label "Search in Files..."
-                              :command :search-in-files}
-                             {:label :separator}
-                             {:label "Close"
-                              :command :close}
-                             {:label "Close All"
-                              :command :close-all}
-                             {:label "Close Others"
-                              :command :close-other}
-                             {:label :separator}
-                             {:label "Referencing Files..."
-                              :command :referencing-files}
-                             {:label "Dependencies..."
-                              :command :dependencies}
-                             {:label "Hot Reload"
-                              :command :hot-reload}
-                             {:label :separator}
-                             {:label "Sign Out"
-                              :command :logout}
-                             {:label "Preferences..."
-                              :command :preferences}
-                             {:label "Quit"
-                              :command :quit}]}
-                 {:label "Edit"
-                  :id ::edit
-                  :children [{:label "Undo"
-                              :icon "icons/undo.png"
-                              :command :undo}
-                             {:label "Redo"
-                              :icon "icons/redo.png"
-                              :command :redo}
-                             {:label :separator}
-                             {:label "Cut"
-                              :command :cut}
-                             {:label "Copy"
-                              :command :copy}
-                             {:label "Paste"
-                              :command :paste}
-                             {:label "Select All"
-                              :command :select-all}
-                             {:label "Delete"
-                              :icon "icons/32/Icons_M_06_trash.png"
-                              :command :delete}
-                             {:label :separator}
-                             {:label "Move Up"
-                              :command :move-up}
-                             {:label "Move Down"
-                              :command :move-down}
-                             {:label :separator
-                              :id ::edit-end}]}
-                 {:label "View"
-                  :id ::view
-                  :children [{:label "Toggle Assets Pane"
-                              :command :toggle-pane-left}
-                             {:label "Toggle Tools Pane"
-                              :command :toggle-pane-bottom}
-                             {:label "Toggle Properties Pane"
-                              :command :toggle-pane-right}
-                             {:label :separator}
-                             {:label "Show Console"
-                              :command :show-console}
-                             {:label "Show Curve Editor"
-                              :command :show-curve-editor}
-                             {:label "Show Build Errors"
-                              :command :show-build-errors}
-                             {:label "Show Search Results"
-                              :command :show-search-results}
-                             {:label :separator
-                              :id ::view-end}]}
-                 {:label "Help"
-                  :children [{:label "Profiler"
-                              :children [{:label "Measure"
-                                          :command :profile}
-                                         {:label "Measure and Show"
-                                          :command :profile-show}]}
-                             {:label "Reload Stylesheet"
-                              :command :reload-stylesheet}
-                             {:label "Show Logs"
-                              :command :show-logs}
-                             {:label :separator}
-                             {:label "Documentation"
-                              :command :documentation}
-                             {:label "Support Forum"
-                              :command :support-forum}
-                             {:label "Find Assets"
-                              :command :asset-portal}
-                             {:label :separator}
-                             {:label "Report Issue"
-                              :command :report-issue}
-                             {:label "Report Suggestion"
-                              :command :report-suggestion}
-                             {:label "Search Issues"
-                              :command :search-issues}
-                             {:label :separator}
-                             {:label "About"
-                              :command :about}]}])
+(handler/register-menu! ::menubar
+  [{:label "File"
+    :id ::file
+    :children [{:label "New..."
+                :id ::new
+                :command :new-file}
+               {:label "Open"
+                :id ::open
+                :command :open}
+               {:label "Synchronize..."
+                :id ::synchronize
+                :command :synchronize}
+               {:label "Save All"
+                :id ::save-all
+                :command :save-all}
+               {:label :separator}
+               {:label "Open Assets..."
+                :command :open-asset}
+               {:label "Search in Files..."
+                :command :search-in-files}
+               {:label :separator}
+               {:label "Close"
+                :command :close}
+               {:label "Close All"
+                :command :close-all}
+               {:label "Close Others"
+                :command :close-other}
+               {:label :separator}
+               {:label "Referencing Files..."
+                :command :referencing-files}
+               {:label "Dependencies..."
+                :command :dependencies}
+               {:label "Hot Reload"
+                :command :hot-reload}
+               {:label :separator}
+               {:label "Sign Out"
+                :command :logout}
+               {:label "Preferences..."
+                :command :preferences}
+               {:label "Quit"
+                :command :quit}]}
+   {:label "Edit"
+    :id ::edit
+    :children [{:label "Undo"
+                :icon "icons/undo.png"
+                :command :undo}
+               {:label "Redo"
+                :icon "icons/redo.png"
+                :command :redo}
+               {:label :separator}
+               {:label "Cut"
+                :command :cut}
+               {:label "Copy"
+                :command :copy}
+               {:label "Paste"
+                :command :paste}
+               {:label "Select All"
+                :command :select-all}
+               {:label "Delete"
+                :icon "icons/32/Icons_M_06_trash.png"
+                :command :delete}
+               {:label :separator}
+               {:label "Move Up"
+                :command :move-up}
+               {:label "Move Down"
+                :command :move-down}
+               {:label :separator
+                :id ::edit-end}]}
+   {:label "View"
+    :id ::view
+    :children [{:label "Toggle Assets Pane"
+                :command :toggle-pane-left}
+               {:label "Toggle Tools Pane"
+                :command :toggle-pane-bottom}
+               {:label "Toggle Properties Pane"
+                :command :toggle-pane-right}
+               {:label :separator}
+               {:label "Show Console"
+                :command :show-console}
+               {:label "Show Curve Editor"
+                :command :show-curve-editor}
+               {:label "Show Build Errors"
+                :command :show-build-errors}
+               {:label "Show Search Results"
+                :command :show-search-results}
+               {:label :separator
+                :id ::view-end}]}
+   {:label "Help"
+    :children [{:label "Profiler"
+                :children [{:label "Measure"
+                            :command :profile}
+                           {:label "Measure and Show"
+                            :command :profile-show}]}
+               {:label "Reload Stylesheet"
+                :command :reload-stylesheet}
+               {:label "Show Logs"
+                :command :show-logs}
+               {:label :separator}
+               {:label "Documentation"
+                :command :documentation}
+               {:label "Support Forum"
+                :command :support-forum}
+               {:label "Find Assets"
+                :command :asset-portal}
+               {:label :separator}
+               {:label "Report Issue"
+                :command :report-issue}
+               {:label "Report Suggestion"
+                :command :report-suggestion}
+               {:label "Search Issues"
+                :command :search-issues}
+               {:label :separator}
+               {:label "About"
+                :command :about}]}])
 
-(ui/extend-menu ::tab-menu nil
-                [{:label "Close"
-                  :command :close}
-                 {:label "Close Others"
-                  :command :close-other}
-                 {:label "Close All"
-                  :command :close-all}
-                 {:label :separator}
-                 {:label "Move to Other Tab Pane"
-                  :command :move-tab}
-                 {:label "Swap With Other Tab Pane"
-                  :command :swap-tabs}
-                 {:label "Join Tab Panes"
-                  :command :join-tab-panes}
-                 {:label :separator}
-                 {:label "Copy Project Path"
-                  :command :copy-project-path}
-                 {:label "Copy Full Path"
-                  :command :copy-full-path}
-                 {:label "Copy Require Path"
-                  :command :copy-require-path}
-                 {:label :separator}
-                 {:label "Show in Asset Browser"
-                  :icon "icons/32/Icons_S_14_linkarrow.png"
-                  :command :show-in-asset-browser}
-                 {:label "Show in Desktop"
-                  :icon "icons/32/Icons_S_14_linkarrow.png"
-                  :command :show-in-desktop}
-                 {:label "Referencing Files..."
-                  :command :referencing-files}
-                 {:label "Dependencies..."
-                  :command :dependencies}])
+(handler/register-menu! ::tab-menu
+  [{:label "Close"
+    :command :close}
+   {:label "Close Others"
+    :command :close-other}
+   {:label "Close All"
+    :command :close-all}
+   {:label :separator}
+   {:label "Move to Other Tab Pane"
+    :command :move-tab}
+   {:label "Swap With Other Tab Pane"
+    :command :swap-tabs}
+   {:label "Join Tab Panes"
+    :command :join-tab-panes}
+   {:label :separator}
+   {:label "Copy Project Path"
+    :command :copy-project-path}
+   {:label "Copy Full Path"
+    :command :copy-full-path}
+   {:label "Copy Require Path"
+    :command :copy-require-path}
+   {:label :separator}
+   {:label "Show in Asset Browser"
+    :icon "icons/32/Icons_S_14_linkarrow.png"
+    :command :show-in-asset-browser}
+   {:label "Show in Desktop"
+    :icon "icons/32/Icons_S_14_linkarrow.png"
+    :command :show-in-desktop}
+   {:label "Referencing Files..."
+    :command :referencing-files}
+   {:label "Dependencies..."
+    :command :dependencies}])
 
 (defrecord SelectionProvider [app-view]
   handler/SelectionProvider

@@ -1,13 +1,125 @@
 (ns editor.handler
-  (:require [plumbing.core :refer [fnk]]
-            [dynamo.graph :as g]
-            [editor.core :as core]
+  (:require [dynamo.graph :as g]
             [editor.analytics :as analytics]
-            [editor.error-reporting :as error-reporting]))
+            [editor.core :as core]
+            [editor.error-reporting :as error-reporting]
+            [editor.util :as util]
+            [plumbing.core :refer [fnk]]))
 
 (set! *warn-on-reflection* true)
 
-(defonce state-atom (atom {:handlers {} :menus {}}))
+(defn- register-handler [state handler-id command context fns]
+  (-> state
+      (assoc-in [:handlers [command context] handler-id] {:command command
+                                                          :context context
+                                                          :fns fns})
+      (update-in [:ids handler-id :handlers] (fnil conj #{}) [command context])))
+
+(defn- unregister-handler [state handler-id]
+  (reduce
+    (fn [acc command+context]
+      (util/dissoc-in acc [:handlers command+context handler-id]))
+    (util/dissoc-in state [:ids handler-id :handlers])
+    (get-in state [:ids handler-id :handlers])))
+
+(defn- register-menu [state menu-id location menu]
+  (-> state
+      (update-in [:menus location] (fnil conj (array-map)) [menu-id menu])
+      (update-in [:ids menu-id :menus] (fnil conj #{}) location)))
+
+(defn- unregister-menu [state menu-id]
+  (reduce
+    (fn [acc location]
+      (util/dissoc-in acc [:menus location menu-id]))
+    (util/dissoc-in state [:ids menu-id :menus])
+    (get-in state [:ids menu-id :menus])))
+
+(defn- unregister-all [state id]
+  (-> state
+      (unregister-menu id)
+      (unregister-handler id)))
+
+(defonce state-atom (atom {}))
+
+(defn register-menu!
+  "Register `menu` with `menu-id` on some optional `location`
+
+  `menu-id` should be unique *per location*, meaning you can use same `menu-id`
+  for different locations, and registering menu with id and location that are
+  already present will override previously registered menu.
+
+  `location` is a place to extend different menus. menu items can have `:id`
+  keys, and all menus that have same `location` as item's id will be inserted
+  after those items. It's also used to [[realize-menu]].
+
+  `menu` is a coll of menu items, which are maps with these keys:
+  - `:id` (optional) - item id that acts as location to insert other menus after
+  - `:icon` (optional) - string path to icon image
+  - `:style` (optional) - coll of strings (css classes) for item view
+  - `:label` (optional) - either string (item label text) or `:separator` (will
+    make item display as separator)
+  - `:command` (optional) - value (usually keyword) for registered command
+  - `:children` (optional) - nested menu
+  - `:graphic-fn` (optional) - 0-arg function that creates a graphic node for
+     this item, takes precedence over `:icon`
+  - `:user-data` (optional) - any value that will be passed to associated
+    command's environment as `user-data` arg
+  - `:check` (optional) - boolean indicating whether this menu item should be
+    have a checkbox"
+  ([menu-id menu]
+   (register-menu! menu-id menu-id menu))
+  ([menu-id location menu]
+   (swap! state-atom register-menu menu-id location menu)))
+
+(defn register-handler!
+  "Register `command` executable in some `context`
+
+  `command` is a value (usually a keyword) that identifies command
+
+  `context` is keyword that identifies when this command is available. there is
+  a stack of contexts at the time when we determine what command is available,
+  and first `active?` command wins
+
+  `handler-id` should be unique *per command+context pair*. This means you can
+  use same `handler-id` for different command+context combinations. It also
+  means that for same command+context pair there may be multiple command
+  candidates with undefined `active?` check order, so you should ensure that for
+  registered command+context pair only one can be active at any given time
+
+  `fns` is a map from predefined set of keywords to `fnk`s that accept inputs
+  provided by context map. allowed keys:
+  - `:run` (optional) - fnk that is invoked when command is executed
+  - `:active?` (optional) - fnk predicate to determine if command is available,
+    has additional `evaluation-context` argument
+  - `:enabled?` (optional) - fnk predicate to determine if available command is
+    enabled or disabled, had additional `evaluation-context` arg. This function
+    is useful when we want some command to be present at all times so user knows
+    it exists, while being enabled only when it makes sense for such command to
+    be enabled
+  - `:state` (optional) - fnk that returns value that is coerced to boolean and
+    determines if associated menu item displayed as active or not
+  - `:label` (optional) - fnk that returns label for menu item associated with
+    this command, takes precedence over such item's `:label`
+  - `:options` (optional) - fnk that returns list of menu items that users first
+    has to choose from before running this command. When command with options is
+    displayed in context menu, it gets a sub-menu with these items. When command
+    is invoked via shortcut, a window pops up that requests user to select one
+    of these options first. `:user-data` from these menu items will be passed as
+    `:user-data` to `:run` fnk"
+  [handler-id command context fns]
+  (swap! state-atom register-handler handler-id command context fns))
+
+; TODO: Validate arguments for all functions and log appropriate message
+
+(defmacro defhandler
+  "Convenience macro for [[register-handler!]]"
+  [command context & body]
+  (let [handler-id (keyword (str *ns*) (name command))
+        fns (->> body
+                 (mapcat (fn [[fname fargs & fbody]]
+                           [(keyword fname) `(fnk ~fargs ~@fbody)]))
+                 (apply hash-map))]
+    `(register-handler! ~handler-id ~command ~context ~fns)))
 
 (defonce ^:dynamic *adapters* nil)
 
@@ -27,24 +139,6 @@
    (->context name env selection-provider dynamics {}))
   ([name env selection-provider dynamics adapters]
    (->Context name env selection-provider dynamics adapters)))
-
-; TODO: Validate arguments for all functions and log appropriate message
-
-(defn reg-handler!
-  ([id context fns]
-   (reg-handler! id (keyword (name id)) context fns))
-  ([id command context fns]
-   (swap! state-atom assoc-in [:handlers [command context] id] {:command command
-                                                                :context context
-                                                                :fns fns})))
-
-(defmacro defhandler [command context & body]
-  (let [qname (keyword (str *ns*) (name command))
-        fns (->> body
-              (mapcat (fn [[fname fargs & fbody]]
-                        [(keyword fname) `(fnk ~fargs ~@fbody)]))
-              (apply hash-map))]
-    `(reg-handler! ~qname ~command ~context ~fns)))
 
 (defn available-commands
   []
@@ -82,20 +176,21 @@
               nil)))
         default))))
 
-(defn- get-active-handler [command command-context evaluation-context]
+(defn- get-active-handler [state command command-context evaluation-context]
   (let [ctx-name (:name command-context)
         ctx (assoc-in command-context [:env :evaluation-context] evaluation-context)]
     (some (fn [handler]
             (when (invoke-fnk handler :active? ctx true)
               handler))
-          (vals (get-in @state-atom [:handlers [command ctx-name]])))))
+          (vals (get-in state [:handlers [command ctx-name]])))))
 
 (defn- get-active [command command-contexts user-data evaluation-context]
-  (some (fn [ctx]
-          (let [full-ctx (assoc-in ctx [:env :user-data] user-data)]
-            (when-let [handler (get-active-handler command full-ctx evaluation-context)]
-              [handler full-ctx])))
-        command-contexts))
+  (let [state @state-atom]
+    (some (fn [ctx]
+            (let [full-ctx (assoc-in ctx [:env :user-data] user-data)]
+              (when-let [handler (get-active-handler state command full-ctx evaluation-context)]
+                [handler full-ctx])))
+          command-contexts)))
 
 (defn- ctx->screen-name [ctx]
   ;; TODO distinguish between scene/form etc when workbench is the context
@@ -174,39 +269,27 @@
           (recur (rest selection-contexts) result))
         result))))
 
-(defn extend-menu! [id location menu]
-  (swap! state-atom update-in [:menus id] (comp distinct concat) (list {:location location :menu menu})))
+(defn- items-at-location [menus location]
+  (into [] cat (vals (get menus location))))
 
-(defn- collect-menu-extensions [menus]
-  (->> menus
-       vals
-       flatten
-       (filter :location)
-       (reduce
-         (fn [acc x]
-           (update-in acc [(:location x)] concat (:menu x)))
-         {})))
+(defn- do-realize-menu [items menus]
+  (into []
+        (comp
+          (map
+            (fn [item]
+              (cond-> item
+                      (:children item)
+                      (update :children do-realize-menu menus))))
+          (mapcat
+            (fn [item]
+              (cond-> [item]
+                      (and (contains? item :id) (contains? menus (:id item)))
+                      (into (do-realize-menu (items-at-location menus (:id item)) menus))))))
+        items))
 
-(defn- do-realize-menu [menu exts]
-  (->> menu
-       (mapv (fn [x]
-               (if (:children x)
-                 (update-in x [:children] do-realize-menu exts)
-                 x)))
-       (mapcat (fn [x]
-                 (if (and (contains? x :id) (contains? exts (:id x)))
-                   (into [x] (do-realize-menu (get exts (:id x)) exts))
-                   [x])))
-       vec))
-
-(defn realize-menu [id]
-  (let [menus (:menus @state-atom)
-        exts (collect-menu-extensions menus)
-        menu (->> (get menus id)
-                  (some (fn [x]
-                          (and (nil? (:location x)) x)))
-                  :menu)]
-    (do-realize-menu menu exts)))
+(defn realize-menu [location]
+  (let [menus (:menus @state-atom)]
+    (do-realize-menu (items-at-location menus location) menus)))
 
 (defn adapt [selection t]
   (if (empty? selection)
