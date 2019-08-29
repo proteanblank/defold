@@ -7,7 +7,6 @@
             [editor.code.script-intelligence :as si]
             [editor.collision-groups :as collision-groups]
             [editor.core :as core]
-            [editor.editor-extensions :as editor-extensions]
             [editor.error-reporting :as error-reporting]
             [editor.gl :as gl]
             [editor.handler :as handler]
@@ -732,15 +731,14 @@
   (handle-changes [this changes render-progress!]
     (handle-resource-changes project-id changes render-progress!)))
 
-(defn make-project [graph workspace-id]
+(defn make-project [graph workspace-id extensions]
   (let [project-id
         (second
           (g/tx-nodes-added
             (g/transact
               (g/make-nodes graph
                   [script-intelligence si/ScriptIntelligenceNode
-                   project [Project :workspace workspace-id]
-                   extensions editor-extensions/EditorExtensions]
+                   project [Project :workspace workspace-id]]
                 (g/connect extensions :_node-id project :editor-extensions)
                 (g/connect script-intelligence :_node-id project :script-intelligence)
                 (g/connect workspace-id :build-settings project :build-settings)
@@ -785,7 +783,7 @@
         (ui/run-later
           (update-system-cache-save-data! evaluation-context))))))
 
-(defn open-project! [graph workspace-id game-project-resource render-progress! login-fn]
+(defn open-project! [graph extensions workspace-id game-project-resource render-progress! login-fn]
   (let [dependencies (read-dependencies game-project-resource)
         progress (atom (progress/make "Updating dependencies..." 13 0))]
     (render-progress! @progress)
@@ -799,12 +797,11 @@
     (render-progress! (swap! progress progress/advance 4 "Syncing resources..."))
     (workspace/resource-sync! workspace-id [] (progress/nest-render-progress render-progress! @progress))
     (render-progress! (swap! progress progress/advance 1 "Loading project..."))
-    (let [project (make-project graph workspace-id)
+    (let [project (make-project graph workspace-id extensions)
           populated-project (load-project project (g/node-value project :resources) (progress/nest-render-progress render-progress! @progress 8))]
       ;; Prime the auto completion cache
       (g/node-value (script-intelligence project) :lua-completions)
       (cache-save-data! populated-project)
-      (editor-extensions/reload project :all)
       populated-project)))
 
 (defn resource-setter [evaluation-context self old-value new-value & connections]

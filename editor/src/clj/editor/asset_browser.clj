@@ -118,7 +118,9 @@
     :icon "icons/32/Icons_M_06_trash.png"}
    {:label :separator}
    {:label "Rename..."
-    :command :rename}])
+    :command :rename}
+   {:label :separator
+    :id ::context-menu-end}])
 
 (def fixed-resource-paths #{"/" "/game.project"})
 

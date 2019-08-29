@@ -1131,6 +1131,8 @@
   ([^Scene scene all-selections?]
    (node-contexts (or (focus-owner scene) (.getRoot scene)) all-selections?)))
 
+#_(map :name (contexts (main-scene) true))
+
 (defn execute-command
   [command-contexts command user-data]
   (let [handler-ctx (handler/active command command-contexts user-data)]

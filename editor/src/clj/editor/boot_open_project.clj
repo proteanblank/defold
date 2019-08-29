@@ -14,6 +14,7 @@
             [editor.dialogs :as dialogs]
             [editor.disk :as disk]
             [editor.disk-availability :as disk-availability]
+            [editor.editor-extensions :as editor-extensions]
             [editor.fxui :as fxui]
             [editor.git :as git]
             [editor.graph-view :as graph-view]
@@ -385,9 +386,11 @@
   [^File game-project-file prefs render-progress! dashboard-client updater newly-created?]
   (let [project-path (.getPath (.getParentFile (.getAbsoluteFile game-project-file)))
         build-settings (workspace/make-build-settings prefs)
-        workspace    (setup-workspace project-path build-settings)
+        workspace (setup-workspace project-path build-settings)
         game-project-res (workspace/resolve-workspace-resource workspace "/game.project")
-        project      (project/open-project! *project-graph* workspace game-project-res render-progress! (partial login/sign-in! dashboard-client :fetch-libraries))]
+        extensions (editor-extensions/make *project-graph*)
+        project (project/open-project! *project-graph* extensions workspace game-project-res render-progress! (partial login/sign-in! dashboard-client :fetch-libraries))]
+    (editor-extensions/reload project :all)
     (ui/run-now
       (load-stage workspace project prefs dashboard-client updater newly-created?)
       (when-let [missing-dependencies (not-empty (workspace/missing-dependencies workspace))]

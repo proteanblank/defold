@@ -93,6 +93,12 @@
   (lua->clj [f]
     f))
 
+(defn invoke
+  ([^LuaFunction f]
+   (.call f))
+  ([^LuaFunction f ^LuaValue arg]
+   (.call f arg)))
+
 (defn- set-globals! [^LuaValue globals m]
   (doseq [[k v] m]
     (.set globals (clj->lua k) (clj->lua v))))

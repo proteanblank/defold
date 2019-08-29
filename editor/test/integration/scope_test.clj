@@ -8,7 +8,8 @@
             [editor.atlas :as atlas]
             [editor.defold-project :as project]
             [editor.workspace :as workspace]
-            [editor.collection :as collection]))
+            [editor.collection :as collection]
+            [editor.editor-extensions :as editor-extensions]))
 
 (defn node-count [graph]
   (count (:nodes graph)))
@@ -17,7 +18,8 @@
   (with-clean-system
     (let [workspace (test-util/setup-workspace! world)
           proj-graph-id (g/make-graph! :history true :volatility 1)
-          project-id (project/make-project proj-graph-id workspace)]
+          extensions (editor-extensions/make proj-graph-id)
+          project-id (project/make-project proj-graph-id workspace extensions)]
       (project/load-project project-id)
       (is (not= 0 (node-count (g/graph proj-graph-id))))
       (g/delete-node! project-id)

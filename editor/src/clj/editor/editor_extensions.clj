@@ -4,16 +4,22 @@
             [editor.luart :as luart]
             [editor.console :as console]
             [clojure.string :as string]
+            [clojure.spec.alpha :as spec]
             [schema.core :as s]
             [editor.workspace :as workspace]
-            [editor.resource :as resource])
-  (:import [org.luaj.vm2 LuaFunction LuaValue LuaError]))
+            [editor.resource :as resource]
+            [editor.handler :as handler])
+  (:import [org.luaj.vm2 LuaFunction LuaValue LuaError]
+           [java.util UUID]))
 
 (set! *warn-on-reflection* true)
 
 (g/defnode EditorExtensions
   (input project-prototypes g/Any :array :substitute gu/array-subst-remove-errors)
   (input library-prototypes g/Any :array :substitute gu/array-subst-remove-errors))
+
+(defn make [graph]
+  (first (g/tx-nodes-added (g/transact (g/make-node graph EditorExtensions)))))
 
 (defn- re-create-ext-map [state env]
   (assoc state :ext-map
@@ -62,8 +68,8 @@
   (resource/resource->proj-path (g/node-value node-id :resource ec)))
 
 (defn- do-ext-get [node-id-or-path key]
-  (let [{:keys [project ec]} *execution-context*]
-    (ext-get (node-id-or-path->node-id node-id-or-path project ec) key ec)))
+  (let [{:keys [project evaluation-context]} *execution-context*]
+    (ext-get (node-id-or-path->node-id node-id-or-path project evaluation-context) key evaluation-context)))
 
 #_(ns-unmap *ns* 'command->txs)
 
@@ -78,12 +84,153 @@
    (g/set-property node-id :regions [])])
 
 (defn- do-command->txs [[command node-id-or-path key value]]
-  (let [{:keys [project ec]} *execution-context*]
+  (let [{:keys [project evaluation-context]} *execution-context*]
     (command->txs command
-                  (node-id-or-path->node-id node-id-or-path project ec)
+                  (node-id-or-path->node-id node-id-or-path project evaluation-context)
                   key
                   value
-                  ec)))
+                  evaluation-context)))
+
+(defmacro with-execution-context [project-expr ec-expr & body]
+  `(binding [*execution-context* {:project ~project-expr :evaluation-context ~ec-expr}]
+     ~@body))
+
+#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
+    (reload project :all))
+
+#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
+    (execute project "on_bundle_complete" {:platform "beep"}))
+
+#_(let [es-id (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1))))]
+    (g/node-value es-id :project-prototypes))
+
+#_(g/clear-system-cache!)
+
+(defmacro with-auto-execution-context [project-expr & body]
+  `(g/with-auto-evaluation-context ec#
+     (with-execution-context ~project-expr ec# ~@body)))
+
+(defn transact [extension-txs]
+  (g/transact (mapv do-command->txs extension-txs)))
+
+;; TODO refactor using exec!
+(defn execute [project step opts]
+  (with-auto-execution-context project
+    (let [^LuaValue lua-opts (luart/clj->lua opts)]
+      (let [txs (into []
+                      (comp
+                        (keep
+                          (fn [^LuaFunction f]
+                            (try
+                              (luart/lua->clj (.call f lua-opts))
+                              (catch LuaError e
+                                (doseq [l (string/split-lines (.getMessage e))]
+                                  (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
+                        cat
+                        (map do-command->txs))
+                      (-> project
+                          (g/node-value :editor-extensions)
+                          (g/user-data :state)
+                          (get-in [:ext-map step])))]
+        (g/transact txs)
+        nil))))
+
+(defn- exec [project fn-name opts]
+  (with-auto-execution-context project
+    (let [^LuaValue lua-opts (luart/clj->lua opts)]
+      (into []
+            (keep
+              (fn [^LuaFunction f]
+                (try
+                  (luart/lua->clj (.call f lua-opts))
+                  (catch LuaError e
+                    (doseq [l (string/split-lines (.getMessage e))]
+                      (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
+            (-> project
+                (g/node-value :editor-extensions)
+                (g/user-data :state)
+                (get-in [:ext-map fn-name]))))))
+
+(defn asset-pane-context-menu-items [project resource-path]
+  (into []
+        (comp
+          cat
+          (map (fn [[name lua-closure]]
+                 {:name name :callback lua-closure})))
+        (exec project "get_assets_pane_context_menu_items" {:path resource-path})))
+
+(defn- continue [acc env lua-fn f & args]
+  (let [new-lua-fn (fn [env m]
+                     (lua-fn env (apply f m args)))]
+    ((acc new-lua-fn) env)))
+
+#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
+    (asset-pane-context-menu-items project "/main/blep.json")
+    project)
+
+;; query -> fn of lua-fn -> fn of env
+
+(defmacro gen-query [[env-sym cont-sym] acc-sym & body-expr]
+  `(fn [lua-fn#]
+     (fn [~env-sym]
+       (let [~cont-sym (partial continue ~acc-sym ~env-sym lua-fn#)]
+         ~@body-expr))))
+
+(defmulti gen-selection-query (fn [q acc]
+                                (get q "type")))
+
+(defn- ensure-selection-cardinality [q selection]
+  (if (= "one" (get q "cardinality"))
+    (when (= 1 (count selection))
+      (first selection))
+    selection))
+
+(defmethod gen-selection-query "resource" [q acc]
+  (gen-query [env cont] acc
+    (when-let [res (some->> (handler/adapt-every (:selection env) resource/Resource)
+                            ;; todo adapt to node ids?
+                            (mapv resource/resource->proj-path)
+                            (ensure-selection-cardinality q))]
+      (cont assoc :selection res))))
+
+(defn- compile-query [q]
+  (reduce-kv
+    (fn [acc k v]
+      (case k
+        "selection" (gen-selection-query v acc)
+        acc))
+    (fn [lua-fn]
+      (fn [env]
+        (lua-fn env {})))
+    q))
+
+(defn- reload-commands! [project]
+  (let [commands (into []
+                       (comp
+                         cat
+                         (map (fn [{:strs [menu label query active run]}]
+                                (let [lua-fn->env-fn (compile-query query)]
+                                  {:context ({"Assets" :asset-browser
+                                              "Outline" :outline} menu :global)
+                                   :menu-item {:label label}
+                                   :location ({"Assets" :editor.asset-browser/context-menu-end
+                                               "Outline" :editor.outline-view/context-menu-end
+                                               "Edit" :editor.app-view/edit-end
+                                               "View" :editor.app-view/view-end} menu :editor.app-view/edit-end)
+                                   :fns (cond-> {}
+                                                active
+                                                (assoc :active? (lua-fn->env-fn
+                                                                  (fn [env opts]
+                                                                    (with-execution-context project (:evaluation-context env)
+                                                                      (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))))
+                                                run
+                                                (assoc :run (lua-fn->env-fn
+                                                              (fn [_ opts]
+                                                                (with-auto-execution-context project
+                                                                  (transact (luart/lua->clj (luart/invoke run (luart/clj->lua opts))))
+                                                                  nil)))))}))))
+                       (exec project "get_commands" {}))]
+    (handler/register-dynamic! ::commands commands)))
 
 (defn reload [project kind]
   (g/with-auto-evaluation-context ec
@@ -105,69 +252,62 @@
                          (g/node-value extensions :project-prototypes ec))
 
                   :always
-                  (re-create-ext-map env)))))))
+                  (re-create-ext-map env))))))
+  (reload-commands! project))
 
-#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
-    (reload project :all))
+#_(let [q {"selection" {"type" "resource", "cardinality" "one"}
+           "app_view" true}
+        lua-fn->env-fn (reduce-kv
+                         (fn [acc k v]
+                           (case k
+                             "selection" (gen-selection-query v acc)
+                             acc))
+                         (fn [lua-fn]
+                           (fn [env]
+                             (lua-fn {})))
+                         q)
+        active-fn (lua-fn->env-fn (constantly true))
+        run-fn (lua-fn->env-fn identity)]
+    (prn :active? '=> (active-fn {:selection [(resource/map->FileResource {:project-path "/boop"})]
+                                  :irrelevant-data [:a :b :c]}))
+    (prn :active? '=> (active-fn {:selection "other"
+                                  :irrelevant-data [:a :b :c]}))
+    (prn :run '=> (run-fn {:selection [(resource/map->FileResource {:project-path "/boop"})] :irrelevant-data [:a :b :c]}))
+    (prn :run '=> (run-fn {:selection "other" :irrelevant-data [:a :b :c]}))
+    #_(criterium.core/quick-bench
+        (active-fn {:selection "resource" :irrelevant-data [:a :b :c]})))
 
-#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
-    (execute project "on_bundle_complete" {:platform "beep"}))
-
-#_(let [es-id (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1))))]
-    (g/node-value es-id :project-prototypes))
-
-#_(g/clear-system-cache!)
-
-(defn execute [project step opts]
-  (g/with-auto-evaluation-context ec
-    (let [^LuaValue lua-opts (luart/clj->lua opts)]
-      (binding [*execution-context* {:project project :ec ec}]
-        (let [txs (into []
-                        (comp
-                          (keep
-                            (fn [^LuaFunction f]
-                              (try
-                                (luart/lua->clj (.call f lua-opts))
-                                (catch LuaError e
-                                  (doseq [l (string/split-lines (.getMessage e))]
-                                    (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
-                          cat
-                          (map do-command->txs))
-                        (-> project
-                            (g/node-value :editor-extensions)
-                            (g/user-data :state)
-                            (get-in [:ext-map step])))]
-          (g/transact txs)
-          nil)))))
-
-(defn- exec [project fn-name opts]
-  (g/with-auto-evaluation-context ec
-    (let [^LuaValue lua-opts (luart/clj->lua opts)]
-      (binding [*execution-context* {:project project :ec ec}]
-        (into []
-              (keep
-                (fn [^LuaFunction f]
-                  (try
-                    (luart/lua->clj (.call f lua-opts))
-                    (catch LuaError e
-                      (doseq [l (string/split-lines (.getMessage e))]
-                        (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
-              (-> project
-                  (g/node-value :editor-extensions)
-                  (g/user-data :state)
-                  (get-in [:ext-map fn-name])))))))
-
-(defn asset-pane-context-menu-items [project resource-path]
-  (into []
-        (comp
-          cat
-          (map (fn [[name lua-closure]]
-                 {:name name :callback lua-closure})))
-        (exec project "get_assets_pane_context_menu_items" {:path resource-path})))
+#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))
+        commands (into []
+                       (comp
+                         cat
+                         (map (fn [{:strs [menu label query active run]}]
+                                (let [lua-fn->env-fn (compile-query query)
+                                      id (keyword (gensym "editor-extension"))]
+                                  {:id id
+                                   :context :global
+                                   :menu [{:label label
+                                           :command id}]
+                                   :location ({"Edit" :editor.app-view/edit-end
+                                               "View" :editor.app-view/view-end} menu :editor.app-view/edit-end)
+                                   :fns {:active? (lua-fn->env-fn
+                                                    (fn [env opts]
+                                                      (with-execution-context project (:evaluation-context env)
+                                                        (luart/lua->clj (luart/invoke active (luart/clj->lua opts))))))
+                                         :run (lua-fn->env-fn
+                                                (fn [_ opts]
+                                                  (with-auto-execution-context project
+                                                    (transact (luart/lua->clj (luart/invoke run (luart/clj->lua opts))))
+                                                    nil)))}}))))
+                       (exec project "get_commands" {}))]
+    commands
+    (handler/register-dynamic! commands)
+    #_(spec/explain ::handler/dynamic-handler (first commands))
+    #_((:active (first commands)) {:evaluation-context (g/make-evaluation-context)
+                                   :selection [(resource/map->FileResource {:project-path "/main/blep.lua"})]}))
 
 
-#_(let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
-    (asset-pane-context-menu-items project "/main/blep.json"))
+; "compilation units": don't need neither lua-fn nor acc, create f(env)
 
 #_(let [x (first (filter #(g/node-instance? editor.code.resource/CodeEditorResourceNode %) (g/node-ids (g/graph 1))))]
     (dev/node-labels x))
@@ -177,10 +317,10 @@
 #_(for [x (filter #(g/node-instance? editor.collection/CollectionNode %) (g/node-ids (g/graph 1)))]
     [(editor.resource/resource->proj-path (g/node-value x :resource)) x])
 
-#_ (prn (ext-get "/main/blep.lua" "text" (g/make-evaluation-context)))
+#_(prn (ext-get "/main/blep.lua" "text" (g/make-evaluation-context)))
 
 #_(ext-get 72057594037928762 "path" (g/make-evaluation-context))
 
-#_ (prn (let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
-          (binding [*execution-context* {:project project :ec (g/make-evaluation-context)}]
-            (do-ext-get "/main/blep.lua" "text"))))
+#_(prn (let [project (first (filter #(g/node-instance? editor.defold-project/Project %) (g/node-ids (g/graph 1))))]
+         (binding [*execution-context* {:project project :ec (g/make-evaluation-context)}]
+           (do-ext-get "/main/blep.lua" "text"))))

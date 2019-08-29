@@ -1,5 +1,6 @@
 (ns editor.handler
-  (:require [dynamo.graph :as g]
+  (:require [clojure.spec.alpha :as s]
+            [dynamo.graph :as g]
             [editor.analytics :as analytics]
             [editor.core :as core]
             [editor.error-reporting :as error-reporting]
@@ -34,12 +35,43 @@
     (util/dissoc-in state [:ids menu-id :menus])
     (get-in state [:ids menu-id :menus])))
 
-(defn- unregister-all [state id]
-  (-> state
-      (unregister-menu id)
-      (unregister-handler id)))
+(defn- register-dynamics [state id dynamic-handlers]
+  (reduce (fn [acc handler]
+            (let [dynamic-id (keyword (gensym "dynamic-handler"))]
+              (-> acc
+                  (update-in [:ids id :dynamics] (fnil conj #{}) dynamic-id)
+                  (register-handler dynamic-id dynamic-id (:context handler :global) (:fns handler))
+                  (register-menu dynamic-id (:location handler) [(assoc (:menu-item handler) :command dynamic-id)]))))
+          state
+          dynamic-handlers))
+
+(defn- unregister-dynamics [state id]
+  (reduce
+    (fn [acc dynamic-id]
+      (-> acc
+          (unregister-menu dynamic-id)
+          (unregister-handler dynamic-id)))
+    (util/dissoc-in state [:ids id :dynamics])
+    (get-in state [:ids id :dynamics])))
 
 (defonce state-atom (atom {}))
+
+(s/def ::menu-item
+  (s/keys :opt-un [::id ::icon ::style ::label ::command ::children ::graphic-fn ::user-data ::check]))
+
+(s/def ::menu (s/coll-of ::menu-item))
+(s/def ::id keyword?)
+(s/def ::icon string?)
+(s/def ::style (s/coll-of string?))
+(s/def ::label (s/or :string string? :separator #{:separator}))
+(s/def ::command keyword?)
+(s/def ::children ::menu)
+(s/def ::graphic-fn fn?)
+(s/def ::user-data any?)
+(s/def ::check boolean?)
+(s/def ::location ::id)
+(s/def ::context simple-keyword?)
+(s/def ::fns (s/map-of keyword? fn?))
 
 (defn register-menu!
   "Register `menu` with `menu-id` on some optional `location`
@@ -64,8 +96,8 @@
      this item, takes precedence over `:icon`
   - `:user-data` (optional) - any value that will be passed to associated
     command's environment as `user-data` arg
-  - `:check` (optional) - boolean indicating whether this menu item should be
-    have a checkbox"
+  - `:check` (optional) - boolean indicating whether this menu item should have
+    a checkbox"
   ([menu-id menu]
    (register-menu! menu-id menu-id menu))
   ([menu-id location menu]
@@ -109,7 +141,33 @@
   [handler-id command context fns]
   (swap! state-atom register-handler handler-id command context fns))
 
-; TODO: Validate arguments for all functions and log appropriate message
+(s/def ::dynamic-handler
+  (s/keys :req-un [::fns ::location ::menu-item] :opt-un [::context]))
+
+(defn register-dynamic!
+  "Atomically register a coll of dynamic handlers for specified id
+
+  Dynamic handlers don't have unique command identifiers, yet they have
+  corresponding menu items that makes them reachable by user
+
+  `dynamic-handlers` is a coll of maps with these keys:
+  - `:context` (optional, default `:global`)
+  - `:fns` (required, handler `fnk`s)
+  - `:location` (required) - keyword for menu item location
+  - `:menu-item` (required)"
+  [id dynamic-handlers]
+  (swap! state-atom
+         (fn [state]
+           (-> state
+               (unregister-dynamics id)
+               (register-dynamics id dynamic-handlers)))))
+
+(s/fdef defhandler
+  :args (s/cat :command ::command
+               :context ::context
+               :body (s/+ (s/spec (s/cat :name #{'active? 'enabled? 'label 'options 'run 'state}
+                                         :args (s/coll-of simple-symbol? :kind vector?)
+                                         :body (s/* any?))))))
 
 (defmacro defhandler
   "Convenience macro for [[register-handler!]]"

@@ -21,7 +21,8 @@
             [internal.system :as is]
             [support.test-support :as test-support]
             [util.http-server :as http-server]
-            [util.thread-util :as thread-util])
+            [util.thread-util :as thread-util]
+            [editor.editor-extensions :as editor-extensions])
   (:import [java.io File FilenameFilter FileInputStream ByteArrayOutputStream]
            [java.util UUID]
            [java.util.concurrent LinkedBlockingQueue]
@@ -115,13 +116,15 @@
 (defn setup-project!
   ([workspace]
    (let [proj-graph (g/make-graph! :history true :volatility 1)
-         project (project/make-project proj-graph workspace)
+         extensions (editor-extensions/make proj-graph)
+         project (project/make-project proj-graph workspace extensions)
          project (project/load-project project)]
      (g/reset-undo! proj-graph)
      project))
   ([workspace resources]
    (let [proj-graph (g/make-graph! :history true :volatility 1)
-         project (project/make-project proj-graph workspace)
+         extensions (editor-extensions/make proj-graph)
+         project (project/make-project proj-graph workspace extensions)
          project (project/load-project project resources)]
      (g/reset-undo! proj-graph)
      project)))

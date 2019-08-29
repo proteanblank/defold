@@ -5,7 +5,8 @@
             [editor.defold-project :as project]
             [editor.resource :as resource]
             [service.log :as log]
-            [integration.test-util :as test-util]))
+            [integration.test-util :as test-util]
+            [editor.editor-extensions :as editor-extensions]))
 
 (def ^:private project-path "test/resources/all_types_project")
 
@@ -127,8 +128,8 @@
    "/test.vp" []
    "/test.wav" []
    "/test2.animationset" []
-   "/test2.gui" ["/test.material"]
-   })
+   "/test2.gui" ["/test.material"]})
+
 
 (defn fallback-dependencies-fn [resource-type]
   (when (#{"vp" "fp" "lua" "script" "gui_script" "wav" "json" "render_script" "dae"} (:ext resource-type))
@@ -154,7 +155,8 @@
   (with-clean-system
     (let [workspace (test-util/setup-workspace! world project-path)
           proj-graph (g/make-graph! :history true :volatility 1)
-          project (project/make-project proj-graph workspace)]
+          extensions (editor-extensions/make proj-graph)
+          project (project/make-project proj-graph workspace extensions)]
       (with-bindings {#'project/*load-cache* (atom #{})}
         (let [nodes (#'project/make-nodes! project (g/node-value project :resources))
               loaded-nodes-by-resource-path (into {} (map (fn [node-id]

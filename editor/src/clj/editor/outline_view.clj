@@ -251,7 +251,9 @@
    {:label "Show Last Hidden Objects"
     :command :show-last-hidden}
    {:label "Show All Hidden Objects"
-    :command :show-all-hidden}])
+    :command :show-all-hidden}
+   {:label :separator
+    :id ::context-menu-end}])
 
 (defn- selection->nodes [selection]
   (handler/adapt-every selection Long))
