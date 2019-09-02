@@ -5,8 +5,8 @@
             [clojure.java.io :as io]
             [editor.console :as console]
             [editor.workspace :as workspace])
-  (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype]
-           [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
+  (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
+           [clojure.lang IPersistentVector IPersistentMap Keyword Fn Reduced]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
            [org.luaj.vm2.lib.jse JsePlatform JseBaseLib JseMathLib JseIoLib JseOsLib]
            [java.io PrintStream BufferedWriter Writer PipedInputStream PipedOutputStream BufferedReader InputStreamReader OutputStream ByteArrayInputStream]
@@ -44,6 +44,12 @@
   (clj->lua [s] (LuaValue/valueOf s))
   LuaString
   (lua->clj [s] (.tojstring s))
+
+  LuaUserdata
+  (lua->clj [userdata]
+    (.userdata userdata))
+  (clj->lua [userdata]
+    userdata)
 
   IPersistentVector
   (clj->lua [v]
@@ -92,6 +98,9 @@
   LuaFunction
   (lua->clj [f]
     f))
+
+(defn wrap-user-data [x]
+  (LuaValue/userdataOf x))
 
 (defn invoke
   ([^LuaFunction f]
