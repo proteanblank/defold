@@ -3,10 +3,11 @@
             [clojure.string :as string]
             [editor.code.syntax :as syntax]
             [editor.code.util :as util])
-  (:import (java.io IOException Reader Writer)
-           (java.nio CharBuffer)
-           (java.util Collections)
-           (java.util.regex MatchResult Pattern)))
+  (:import [java.io IOException Reader Writer InputStream]
+           [java.nio CharBuffer]
+           [java.util Collections]
+           [java.util.regex MatchResult Pattern]
+           [org.apache.commons.io.input ReaderInputStream]))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* :warn-on-boxed)
@@ -316,6 +317,9 @@
                                      (- remaining num-copied)
                                      (+ dest-offset num-copied)))))))))
            @*num-read))))))
+
+(defn lines-input-stream ^InputStream [lines]
+  (ReaderInputStream. (lines-reader lines)))
 
 (defrecord Rect [^double x ^double y ^double w ^double h])
 

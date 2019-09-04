@@ -9,7 +9,7 @@
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn Reduced]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
            [org.luaj.vm2.lib.jse JsePlatform JseBaseLib JseMathLib JseIoLib JseOsLib]
-           [java.io PrintStream BufferedWriter Writer PipedInputStream PipedOutputStream BufferedReader InputStreamReader OutputStream ByteArrayInputStream]
+           [java.io PrintStream BufferedWriter Writer PipedInputStream PipedOutputStream BufferedReader InputStreamReader OutputStream ByteArrayInputStream File]
            [org.apache.commons.io.output WriterOutputStream]
            [org.luaj.vm2.compiler LuaC]
            [java.nio.charset Charset]))
@@ -128,16 +128,13 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [find-resource extra-globals]
+  ^Globals [resource-path->input-stream extra-globals]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
-               (let [^JseBaseLib this this]
-                 (prn :find filename)
-                 (some-> (find-resource (str "/" filename))
-                         io/input-stream)
-                 #_(proxy-super findResource filename)))))
+               (resource-path->input-stream (str "/" filename)))))
     (.load (PackageLib.))
+    (-> (.get "package") (.set "config" (string/join "\n" [File/pathSeparatorChar \; \? \! \-])))
     (.load (Bit32Lib.))
     (.load (TableLib.))
     (.load (StringLib.))

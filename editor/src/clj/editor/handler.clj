@@ -9,12 +9,19 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- register-handler [state handler-id command context fns]
-  (-> state
-      (assoc-in [:handlers [command context] handler-id] {:command command
-                                                          :context context
-                                                          :fns fns})
-      (update-in [:ids handler-id :handlers] (fnil conj #{}) [command context])))
+(defn- register-handler [state handler-id command context-definition fns]
+  (let [contexts (if (keyword? context-definition)
+                   [context-definition]
+                   context-definition)]
+    (reduce
+      (fn [acc context]
+        (-> acc
+            (assoc-in [:handlers [command context] handler-id] {:command command
+                                                                :context context
+                                                                :fns fns})
+            (update-in [:ids handler-id :handlers] (fnil conj #{}) [command context])))
+      state
+      contexts)))
 
 (defn- unregister-handler [state handler-id]
   (reduce
@@ -36,14 +43,18 @@
     (get-in state [:ids menu-id :menus])))
 
 (defn- register-dynamics [state id dynamic-handlers]
-  (reduce (fn [acc handler]
-            (let [dynamic-id (keyword (gensym "dynamic-handler"))]
-              (-> acc
-                  (update-in [:ids id :dynamics] (fnil conj #{}) dynamic-id)
-                  (register-handler dynamic-id dynamic-id (:context handler :global) (:fns handler))
-                  (register-menu dynamic-id (:location handler) [(assoc (:menu-item handler) :command dynamic-id)]))))
-          state
-          dynamic-handlers))
+  (reduce
+    (fn [acc handler]
+      (let [dynamic-id (keyword (gensym "dynamic-handler"))
+            {:keys [context-definition locations menu-item]
+             :or {context-definition :global}} handler
+            menu-item (assoc menu-item :command dynamic-id)]
+        (-> acc
+            (update-in [:ids id :dynamics] (fnil conj #{}) dynamic-id)
+            (register-handler dynamic-id dynamic-id context-definition (:fns handler))
+            (as-> x (reduce #(register-menu %1 dynamic-id %2 [menu-item]) x locations)))))
+    state
+    dynamic-handlers))
 
 (defn- unregister-dynamics [state id]
   (reduce
@@ -70,7 +81,11 @@
 (s/def ::user-data any?)
 (s/def ::check boolean?)
 (s/def ::location ::id)
+(s/def ::locations (s/coll-of ::location))
 (s/def ::context simple-keyword?)
+(s/def ::context-definition
+  (s/or :one ::context
+        :many (s/coll-of ::context :min-count 1 :distinct true)))
 (s/def ::fns (s/map-of keyword? fn?))
 
 (defn register-menu!
@@ -108,9 +123,9 @@
 
   `command` is a value (usually a keyword) that identifies command
 
-  `context` is keyword that identifies when this command is available. there is
-  a stack of contexts at the time when we determine what command is available,
-  and first `active?` command wins
+  `context-definition` is keyword (or coll of keywords) that identify when this
+  command is available. There is a stack of contexts at the time when we
+  determine what command is available, and first `active?` command wins
 
   `handler-id` should be unique *per command+context pair*. This means you can
   use same `handler-id` for different command+context combinations. It also
@@ -138,11 +153,11 @@
     is invoked via shortcut, a window pops up that requests user to select one
     of these options first. `:user-data` from these menu items will be passed as
     `:user-data` to `:run` fnk"
-  [handler-id command context fns]
-  (swap! state-atom register-handler handler-id command context fns))
+  [handler-id command context-definition fns]
+  (swap! state-atom register-handler handler-id command context-definition fns))
 
 (s/def ::dynamic-handler
-  (s/keys :req-un [::fns ::location ::menu-item] :opt-un [::context]))
+  (s/keys :req-un [::fns ::locations ::menu-item] :opt-un [::context-definition]))
 
 (defn register-dynamic!
   "Atomically register a coll of dynamic handlers for specified id
@@ -151,10 +166,12 @@
   corresponding menu items that makes them reachable by user
 
   `dynamic-handlers` is a coll of maps with these keys:
-  - `:context` (optional, default `:global`)
-  - `:fns` (required, handler `fnk`s)
-  - `:location` (required) - keyword for menu item location
-  - `:menu-item` (required)"
+  - `:context-definition` (optional, default `:global`) - keyword or coll of
+    keywords that identify when this dynamic command is available
+  - `:fns` (required, handler `fnk`s) - map from predefined set of keywords to
+    functions, see [[register-handler!]]
+  - `:locations` (required) - collection of menu item locations
+  - `:menu-item` (required) - menu item description"
   [id dynamic-handlers]
   (swap! state-atom
          (fn [state]
@@ -164,20 +181,20 @@
 
 (s/fdef defhandler
   :args (s/cat :command ::command
-               :context ::context
+               :context ::context-definition
                :body (s/+ (s/spec (s/cat :name #{'active? 'enabled? 'label 'options 'run 'state}
                                          :args (s/coll-of simple-symbol? :kind vector?)
                                          :body (s/* any?))))))
 
 (defmacro defhandler
   "Convenience macro for [[register-handler!]]"
-  [command context & body]
+  [command context-definition & body]
   (let [handler-id (keyword (str *ns*) (name command))
         fns (->> body
                  (mapcat (fn [[fname fargs & fbody]]
                            [(keyword fname) `(fnk ~fargs ~@fbody)]))
                  (apply hash-map))]
-    `(register-handler! ~handler-id ~command ~context ~fns)))
+    `(register-handler! ~handler-id ~command ~context-definition ~fns)))
 
 (defonce ^:dynamic *adapters* nil)
 
@@ -287,10 +304,6 @@
   ([command command-contexts user-data evaluation-context]
    (get-active command command-contexts user-data evaluation-context)))
 
-#_(reg-handler! :boop/doop :doop :global {:run (fnk [woot] (prn woot))})
-
-#_(run (active :doop [{:name :global :env {:woot :shoot}}] {}))
-
 (defn- context-selections [context]
   (if-let [s (get-in context [:env :selection])]
     [s]
@@ -364,7 +377,7 @@
               (and (:on-interface t) (instance? (:on-interface t) v)) identity
               ;; test for node types specifically by checking for longs
               ;; we can't use g/NodeID because that is actually a wrapped ValueTypeRef
-              (and (g/isa-node-type? t) (= (type v) java.lang.Long)) (fn [v] (when (g/node-instance? t v) v))
+              (and (g/isa-node-type? t) (= (type v) Long)) (fn [v] (when (g/node-instance? t v) v))
               (satisfies? core/Adaptable v) (fn [v] (core/adapt v t))
               true (get adapters t (constantly nil)))]
       (mapv f selection))))

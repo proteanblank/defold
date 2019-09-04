@@ -5,6 +5,7 @@
             [editor.console :as console]
             [clojure.string :as string]
             [schema.core :as s]
+            [editor.code.data :as data]
             [editor.workspace :as workspace]
             [editor.resource :as resource]
             [editor.handler :as handler]
@@ -157,7 +158,7 @@
                                  (node-ids->lua-selection q))
                          (some-> selection
                                  (handler/adapt-every resource/Resource)
-                                 (->> (mapv #(project/get-resource-node project % evaluation-context)))
+                                 (->> (keep #(project/get-resource-node project % evaluation-context)))
                                  (node-ids->lua-selection q)))]
         (cont assoc :selection res)))))
 
@@ -176,14 +177,23 @@
   (let [commands (into []
                        (comp
                          cat
-                         (map (fn [{:strs [menu label query active run]}]
-                                (let [lua-fn->env-fn (compile-query query project)]
-                                  {:context :global
+                         (map (fn [{:strs [label query active run locations]}]
+                                (let [lua-fn->env-fn (compile-query query project)
+                                      contexts (into #{}
+                                                     (map {"Assets" :asset-browser
+                                                           "Outline" :outline
+                                                           "Edit" :global
+                                                           "View" :global})
+                                                     locations)
+                                      locations (into #{}
+                                                      (map {"Assets" :editor.asset-browser/context-menu-end
+                                                            "Outline" :editor.outline-view/context-menu-end
+                                                            "Edit" :editor.app-view/edit-end
+                                                            "View" :editor.app-view/view-end})
+                                                      locations)]
+                                  {:context-definition contexts
                                    :menu-item {:label label}
-                                   :location ({"Assets" :editor.asset-browser/context-menu-end
-                                               "Outline" :editor.outline-view/context-menu-end
-                                               "Edit" :editor.app-view/edit-end
-                                               "View" :editor.app-view/view-end} menu :editor.app-view/edit-end)
+                                   :locations locations
                                    :fns (cond-> {}
                                                 active
                                                 (assoc :active? (lua-fn->env-fn
@@ -206,8 +216,10 @@
       :state
       (fn [state]
         (let [extensions (g/node-value project :editor-extensions ec)
-              workspace (g/node-value project :workspace ec)
-              env (luart/make-env #(workspace/find-resource workspace % ec)
+              env (luart/make-env (fn [path]
+                                    (some-> (project/get-resource-node project path ec)
+                                            (g/node-value :lines ec)
+                                            (data/lines-input-stream)))
                                   {"editor" {"get" do-ext-get}})]
           (cond-> state
                   (#{:library :all} kind)
