@@ -141,7 +141,7 @@
     (.load (CoroutineLib.))
     (.load (JseMathLib.))
     (.load (JseIoLib.))
-    (.load (JseOsLib.))
+    #_(.load (JseOsLib.))
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(console/append-console-entry! :extension-out %))))

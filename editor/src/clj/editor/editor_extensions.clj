@@ -93,11 +93,13 @@
                                      (get action "property")]))
 
 (defmethod transaction-action->txs ["set" :editor.code.resource/CodeEditorResourceNode "text"]
-  [_ node-id _ value _]
-  [(g/set-property node-id :modified-lines (string/split value #"\n"))
-   (g/update-property node-id :invalidated-rows conj 0)
-   (g/set-property node-id :cursor-ranges [#code/range[[0 0] [0 0]]])
-   (g/set-property node-id :regions [])])
+  [action _]
+  (let [node-id (get action "node_id")
+        value (get action "value")]
+    [(g/set-property node-id :modified-lines (string/split value #"\n"))
+     (g/update-property node-id :invalidated-rows conj 0)
+     (g/set-property node-id :cursor-ranges [#code/range[[0 0] [0 0]]])
+     (g/set-property node-id :regions [])]))
 
 (defmulti action->batched-executor+input (fn [action _evaluation-context]
                                            (get action "action")))
