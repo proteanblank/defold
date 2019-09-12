@@ -4,12 +4,13 @@
             [editor.luart :as luart]
             [editor.console :as console]
             [clojure.string :as string]
+            [clojure.java.shell :as shell]
             [schema.core :as s]
             [editor.code.data :as data]
-            [editor.workspace :as workspace]
             [editor.resource :as resource]
             [editor.handler :as handler]
-            [editor.defold-project :as project])
+            [editor.defold-project :as project]
+            [editor.error-reporting :as error-reporting])
   (:import [org.luaj.vm2 LuaFunction LuaValue LuaError]))
 
 (set! *warn-on-reflection* true)
@@ -22,6 +23,12 @@
 
 (defn make [graph]
   (first (g/tx-nodes-added (g/transact (g/make-node graph EditorExtensions)))))
+
+(defprotocol UI
+  (reload-resources! [this]
+    "Synchronously reload resources, throw exception if failed")
+  (can-execute? [this command]
+    "Ask user to execute command (a vector of command name string and argument strings)"))
 
 (defn- re-create-ext-map [state env]
   (assoc state :ext-map
@@ -45,7 +52,9 @@
                  (concat (:library-prototypes state)
                          (:project-prototypes state)))))
 
-(def ^:private ^:dynamic *execution-context*)
+(def ^:private ^:dynamic *execution-context*
+  "A map with `:project-id` and `:evaluation-context`"
+  nil)
 
 (defn- node-id->type-keyword [node-id ec]
   (let [{:keys [basis]} ec]
@@ -64,55 +73,61 @@
   (let [{:keys [evaluation-context]} *execution-context*]
     (ext-get node-id key evaluation-context)))
 
-(defmulti command->txs (fn [command node-id key value ec]
-                         [command (node-id->type-keyword node-id ec) key]))
+(defn- transact! [txs _execution-context]
+  (g/transact txs))
 
-(defmethod command->txs ["set" :editor.code.resource/CodeEditorResourceNode "text"]
+(defn- shell! [commands execution-context]
+  (let [{:keys [evaluation-context project ui]} execution-context
+        root (-> project
+                 (g/node-value :workspace evaluation-context)
+                 (g/node-value :root evaluation-context))]
+    (doseq [cmd+args commands]
+      (if (can-execute? ui cmd+args)
+        (apply shell/sh (concat cmd+args [:dir root]))
+        (throw (ex-info (str "Command `" (string/join " " cmd+args) "` not allowed") {:cmd cmd+args}))))
+    (reload-resources! ui)))
+
+(defmulti transaction-action->txs (fn [action evaluation-context]
+                                    [(get action "action")
+                                     (node-id->type-keyword (get action "node_id") evaluation-context)
+                                     (get action "property")]))
+
+(defmethod transaction-action->txs ["set" :editor.code.resource/CodeEditorResourceNode "text"]
   [_ node-id _ value _]
   [(g/set-property node-id :modified-lines (string/split value #"\n"))
    (g/update-property node-id :invalidated-rows conj 0)
    (g/set-property node-id :cursor-ranges [#code/range[[0 0] [0 0]]])
    (g/set-property node-id :regions [])])
 
-(defn- do-command->txs [[command node-id key value]]
-  (let [{:keys [evaluation-context]} *execution-context*]
-    (command->txs command node-id key value evaluation-context)))
+(defmulti action->batched-executor+input (fn [action _evaluation-context]
+                                           (get action "action")))
 
-(defmacro with-execution-context [project-expr ec-expr & body]
-  `(binding [*execution-context* {:project ~project-expr :evaluation-context ~ec-expr}]
+(defmethod action->batched-executor+input "set" [action evaluation-context]
+  [transact! (transaction-action->txs action evaluation-context)])
+
+(defmethod action->batched-executor+input "shell" [action _]
+  [shell! (get action "command")])
+
+(defn perform-actions [extension-actions execution-context]
+  (let [{:keys [evaluation-context]} execution-context]
+    (doseq [[executor inputs] (eduction (map #(action->batched-executor+input % evaluation-context))
+                                        (partition-by first)
+                                        (map (juxt ffirst #(mapv second %)))
+                                        extension-actions)]
+      (executor inputs execution-context))))
+
+(defmacro with-execution-context [project-expr ui-expr ec-expr & body]
+  `(binding [*execution-context* {:project ~project-expr
+                                  :evaluation-context ~ec-expr
+                                  :ui ~ui-expr}]
      ~@body))
 
-(defmacro with-auto-execution-context [project-expr & body]
+(defmacro with-auto-execution-context [project-expr ui-expr & body]
   `(g/with-auto-evaluation-context ec#
-     (with-execution-context ~project-expr ec# ~@body)))
+     (with-execution-context ~project-expr ~ui-expr ec# ~@body)))
 
-(defn transact [extension-txs]
-  (g/transact (mapv do-command->txs extension-txs)))
-
-;; TODO refactor using exec!
-(defn execute [project step opts]
-  (with-auto-execution-context project
-    (let [^LuaValue lua-opts (luart/clj->lua opts)]
-      (let [txs (into []
-                      (comp
-                        (keep
-                          (fn [^LuaFunction f]
-                            (try
-                              (luart/lua->clj (.call f lua-opts))
-                              (catch LuaError e
-                                (doseq [l (string/split-lines (.getMessage e))]
-                                  (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
-                        cat
-                        (map do-command->txs))
-                      (-> project
-                          (g/node-value :editor-extensions)
-                          (g/user-data :state)
-                          (get-in [:ext-map step])))]
-        (g/transact txs)
-        nil))))
-
-(defn- exec [project fn-name opts]
-  (with-auto-execution-context project
+(defn- exec [project ui fn-name opts]
+  (with-auto-execution-context project ui
     (let [^LuaValue lua-opts (luart/clj->lua opts)]
       (into []
             (keep
@@ -175,43 +190,53 @@
         (lua-fn env {})))
     q))
 
-(defn- reload-commands! [project]
+(defn- lua-command->dynamic-command [{:strs [label query active run locations]} project ui]
+  (let [lua-fn->env-fn (compile-query query project)
+        contexts (into #{}
+                       (map {"Assets" :asset-browser
+                             "Outline" :outline
+                             "Edit" :global
+                             "View" :global})
+                       locations)
+        locations (into #{}
+                        (map {"Assets" :editor.asset-browser/context-menu-end
+                              "Outline" :editor.outline-view/context-menu-end
+                              "Edit" :editor.app-view/edit-end
+                              "View" :editor.app-view/view-end})
+                        locations)]
+    {:context-definition contexts
+     :menu-item {:label label}
+     :locations locations
+     :fns (cond-> {}
+                  active
+                  (assoc :active?
+                         (lua-fn->env-fn
+                           (fn [env opts]
+                             (with-execution-context project ui (:evaluation-context env)
+                               (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))))
+                  run
+                  (assoc :run
+                         (lua-fn->env-fn
+                           (fn [_ opts]
+                             (with-auto-execution-context project ui
+                               (future
+                                 (error-reporting/catch-all!
+                                   (try
+                                     (perform-actions (luart/lua->clj (luart/invoke run (luart/clj->lua opts)))
+                                                      *execution-context*)
+                                     (catch Exception e
+                                       (console/append-console-entry! :extension-err (str "ERROR:EXT: " label " failed: " (.getMessage e)))))))
+                               nil)))))}))
+
+(defn- reload-commands! [project ui]
   (let [commands (into []
                        (comp
                          cat
-                         (map (fn [{:strs [label query active run locations]}]
-                                (let [lua-fn->env-fn (compile-query query project)
-                                      contexts (into #{}
-                                                     (map {"Assets" :asset-browser
-                                                           "Outline" :outline
-                                                           "Edit" :global
-                                                           "View" :global})
-                                                     locations)
-                                      locations (into #{}
-                                                      (map {"Assets" :editor.asset-browser/context-menu-end
-                                                            "Outline" :editor.outline-view/context-menu-end
-                                                            "Edit" :editor.app-view/edit-end
-                                                            "View" :editor.app-view/view-end})
-                                                      locations)]
-                                  {:context-definition contexts
-                                   :menu-item {:label label}
-                                   :locations locations
-                                   :fns (cond-> {}
-                                                active
-                                                (assoc :active? (lua-fn->env-fn
-                                                                  (fn [env opts]
-                                                                    (with-execution-context project (:evaluation-context env)
-                                                                      (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))))
-                                                run
-                                                (assoc :run (lua-fn->env-fn
-                                                              (fn [_ opts]
-                                                                (with-auto-execution-context project
-                                                                  (transact (luart/lua->clj (luart/invoke run (luart/clj->lua opts))))
-                                                                  nil)))))}))))
-                       (exec project "get_commands" {}))]
+                         (map #(lua-command->dynamic-command % project ui)))
+                       (exec project ui "get_commands" {}))]
     (handler/register-dynamic! ::commands commands)))
 
-(defn reload [project kind]
+(defn reload [project kind ui]
   (g/with-auto-evaluation-context ec
     (g/user-data-swap!
       (g/node-value project :editor-extensions ec)
@@ -234,4 +259,4 @@
 
                   :always
                   (re-create-ext-map env))))))
-  (reload-commands! project))
+  (reload-commands! project ui))

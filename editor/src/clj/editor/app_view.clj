@@ -1800,9 +1800,7 @@ If you do not specifically require different script states, consider changing th
                            (fn [successful?]
                              (when successful?
                                (if (some-> output-directory .isDirectory)
-                                 (do
-                                   (ui/open-file output-directory)
-                                   (extensions/execute project "on_bundle_complete" {:platform platform}))
+                                 (ui/open-file output-directory)
                                  (dialogs/make-info-dialog
                                    {:title "Bundle Failed"
                                     :icon :icon/triangle-error
@@ -1822,6 +1820,34 @@ If you do not specifically require different script states, consider changing th
     (let [last-bundle-options (g/user-data project :last-bundle-options)
           platform (:platform-key last-bundle-options)]
       (bundle! main-stage tool-tab-pane changes-view build-errors-view project prefs platform last-bundle-options))))
+
+(defn make-extensions-ui [workspace changes-view]
+  (reify extensions/UI
+    (reload-resources! [_]
+      (let [success-promise (promise)]
+        (disk/async-reload! (make-render-task-progress :resource-sync)
+                            workspace
+                            []
+                            changes-view
+                            success-promise)
+        (when-not @success-promise
+          (throw (ex-info "Reload failed" {})))))
+    (can-execute? [_ command]
+      (ui/run-now
+        (dialogs/make-confirmation-dialog
+          {:title "Allow executing shell command?"
+           :icon :icon/triangle-error
+           :header "Extension wants to execute a shell command"
+           :content {:fx/type fxui/label
+                     :style-class "dialog-content-padding"
+                     :text (string/join " " command)}
+           :buttons [{:text "Abort Command"
+                      :cancel-button true
+                      :default-button true
+                      :result false}
+                     {:text "Execute"
+                      :variant :danger
+                      :result true}]})))))
 
 (defn- fetch-libraries [workspace project dashboard-client changes-view]
   (let [library-uris (project/project-dependencies project)
@@ -1846,7 +1872,7 @@ If you do not specifically require different script states, consider changing th
                   (disk/async-reload! render-install-progress! workspace [] changes-view
                                       (fn [success]
                                         (when success
-                                          (extensions/reload project :library)))))))))))))
+                                          (extensions/reload project :library (make-extensions-ui workspace changes-view))))))))))))))
 
 (handler/defhandler :add-dependency :global
   (enabled? [] (disk-availability/available?))
@@ -1865,7 +1891,7 @@ If you do not specifically require different script states, consider changing th
 
 (handler/defhandler :reload-extensions :global
   (enabled? [] (disk-availability/available?))
-  (run [project] (extensions/reload project :all)))
+  (run [project workspace changes-view] (extensions/reload project :all (make-extensions-ui workspace changes-view))))
 
 (defn- create-and-open-live-update-settings! [app-view changes-view prefs project]
   (let [workspace (project/workspace project)

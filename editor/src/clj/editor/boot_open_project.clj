@@ -194,6 +194,7 @@
                                                       open-resource
                                                       (partial app-view/debugger-state-changed! scene tool-tabs))]
       (ui/add-application-focused-callback! :main-stage handle-application-focused! workspace changes-view)
+      (editor-extensions/reload project :all (app-view/make-extensions-ui workspace changes-view))
 
       (when updater
         (let [update-link (.lookup root "#update-link")]
@@ -390,7 +391,6 @@
         game-project-res (workspace/resolve-workspace-resource workspace "/game.project")
         extensions (editor-extensions/make *project-graph*)
         project (project/open-project! *project-graph* extensions workspace game-project-res render-progress! (partial login/sign-in! dashboard-client :fetch-libraries))]
-    (editor-extensions/reload project :all)
     (ui/run-now
       (load-stage workspace project prefs dashboard-client updater newly-created?)
       (when-let [missing-dependencies (not-empty (workspace/missing-dependencies workspace))]
