@@ -1836,7 +1836,9 @@ If you do not specifically require different script states, consider changing th
       (ui/run-now
         (dialogs/make-confirmation-dialog
           {:title "Allow executing shell command?"
-           :icon :icon/triangle-error
+           :icon {:fx/type fxui/icon
+                  :type :icon/triangle-error
+                  :fill "#fa6731"}
            :header "Extension wants to execute a shell command"
            :content {:fx/type fxui/label
                      :style-class "dialog-content-padding"

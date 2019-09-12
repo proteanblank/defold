@@ -84,7 +84,7 @@
     (doseq [cmd+args commands]
       (if (can-execute? ui cmd+args)
         (apply shell/sh (concat cmd+args [:dir root]))
-        (throw (ex-info (str "Command `" (string/join " " cmd+args) "` not allowed") {:cmd cmd+args}))))
+        (throw (ex-info (str "Command `" (string/join " " cmd+args) "` aborted") {:cmd cmd+args}))))
     (reload-resources! ui)))
 
 (defmulti transaction-action->txs (fn [action evaluation-context]
