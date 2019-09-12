@@ -1821,7 +1821,7 @@ If you do not specifically require different script states, consider changing th
           platform (:platform-key last-bundle-options)]
       (bundle! main-stage tool-tab-pane changes-view build-errors-view project prefs platform last-bundle-options))))
 
-(defn make-extensions-ui [workspace changes-view]
+(defn make-extensions-ui [workspace changes-view prefs]
   (reify extensions/UI
     (reload-resources! [_]
       (let [success-promise (promise)]
@@ -1832,26 +1832,32 @@ If you do not specifically require different script states, consider changing th
                             success-promise)
         (when-not @success-promise
           (throw (ex-info "Reload failed" {})))))
-    (can-execute? [_ command]
-      (ui/run-now
-        (dialogs/make-confirmation-dialog
-          {:title "Allow executing shell command?"
-           :icon {:fx/type fxui/icon
-                  :type :icon/triangle-error
-                  :fill "#fa6731"}
-           :header "Extension wants to execute a shell command"
-           :content {:fx/type fxui/label
-                     :style-class "dialog-content-padding"
-                     :text (string/join " " command)}
-           :buttons [{:text "Abort Command"
-                      :cancel-button true
-                      :default-button true
-                      :result false}
-                     {:text "Execute"
-                      :variant :danger
-                      :result true}]})))))
+    (can-execute? [_ [cmd-name :as command]]
+      (let [allowed-commands (prefs/get-prefs prefs "editor-extensions/allowed-commands" #{})]
+        (if (allowed-commands cmd-name)
+          true
+          (let [allow (ui/run-now
+                        (dialogs/make-confirmation-dialog
+                          {:title "Allow executing shell command?"
+                           :icon {:fx/type fxui/icon
+                                  :type :icon/triangle-error
+                                  :fill "#fa6731"}
+                           :header "Extension wants to execute a shell command"
+                           :content {:fx/type fxui/label
+                                     :style-class "dialog-content-padding"
+                                     :text (string/join " " command)}
+                           :buttons [{:text "Abort Command"
+                                      :cancel-button true
+                                      :default-button true
+                                      :result false}
+                                     {:text "Execute"
+                                      :variant :danger
+                                      :result true}]}))]
+            (when allow
+              (prefs/set-prefs prefs "editor-extensions/allowed-commands" (conj allowed-commands cmd-name)))
+            allow))))))
 
-(defn- fetch-libraries [workspace project dashboard-client changes-view]
+(defn- fetch-libraries [workspace project dashboard-client changes-view prefs]
   (let [library-uris (project/project-dependencies project)
         hosts (into #{} (map url/strip-path) library-uris)]
     (if-let [first-unreachable-host (first-where (complement url/reachable?) hosts)]
@@ -1874,7 +1880,7 @@ If you do not specifically require different script states, consider changing th
                   (disk/async-reload! render-install-progress! workspace [] changes-view
                                       (fn [success]
                                         (when success
-                                          (extensions/reload project :library (make-extensions-ui workspace changes-view))))))))))))))
+                                          (extensions/reload project :library (make-extensions-ui workspace changes-view prefs))))))))))))))
 
 (handler/defhandler :add-dependency :global
   (enabled? [] (disk-availability/available?))
@@ -1885,15 +1891,17 @@ If you do not specifically require different script states, consider changing th
          (when (not-any? (partial = dependency-uri) dependencies)
            (game-project/set-setting! game-project ["project" "dependencies"]
                                       (conj (vec dependencies) dependency-uri))
-           (fetch-libraries workspace project dashboard-client changes-view)))))
+           (fetch-libraries workspace project dashboard-client changes-view prefs)))))
 
 (handler/defhandler :fetch-libraries :global
   (enabled? [] (disk-availability/available?))
-  (run [workspace project dashboard-client changes-view] (fetch-libraries workspace project dashboard-client changes-view)))
+  (run [workspace project dashboard-client changes-view prefs]
+       (fetch-libraries workspace project dashboard-client changes-view prefs)))
 
 (handler/defhandler :reload-extensions :global
   (enabled? [] (disk-availability/available?))
-  (run [project workspace changes-view] (extensions/reload project :all (make-extensions-ui workspace changes-view))))
+  (run [project workspace changes-view prefs]
+       (extensions/reload project :all (make-extensions-ui workspace changes-view prefs))))
 
 (defn- create-and-open-live-update-settings! [app-view changes-view prefs project]
   (let [workspace (project/workspace project)
