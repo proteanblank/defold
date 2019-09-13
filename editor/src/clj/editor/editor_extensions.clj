@@ -11,7 +11,7 @@
             [editor.handler :as handler]
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting])
-  (:import [org.luaj.vm2 LuaFunction LuaValue LuaError Prototype]))
+  (:import [org.luaj.vm2 LuaFunction LuaError Prototype]))
 
 (set! *warn-on-reflection* true)
 
@@ -182,12 +182,12 @@
 
 (defn- exec-all [project ui fn-name opts]
   (with-auto-execution-context project ui
-    (let [^LuaValue lua-opts (luart/clj->lua opts)]
+    (let [lua-opts (luart/clj->lua opts)]
       (into []
             (keep
-              (fn [^LuaFunction f]
+              (fn [f]
                 (try
-                  (luart/lua->clj (.call f lua-opts))
+                  (luart/lua->clj (luart/invoke f lua-opts))
                   (catch LuaError e
                     (doseq [l (string/split-lines (.getMessage e))]
                       (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
@@ -198,13 +198,13 @@
 
 (defn- exec-hook [project ui hook opts]
   (with-auto-execution-context project ui
-    (let [^LuaValue lua-opts (luart/clj->lua opts)]
-      (when-let [^LuaFunction f (-> project
-                                    (g/node-value :editor-extensions)
-                                    (g/user-data :state)
-                                    (get-in [:ext-map :hooks hook]))]
+    (let [lua-opts (luart/clj->lua opts)]
+      (when-let [f (-> project
+                       (g/node-value :editor-extensions)
+                       (g/user-data :state)
+                       (get-in [:ext-map :hooks hook]))]
         (try
-          (some-> (luart/lua->clj (.call f lua-opts))
+          (some-> (luart/lua->clj (luart/invoke f lua-opts))
                   (perform-actions! *execution-context*))
           (catch Exception e
             (doseq [line (string/split-lines (.getMessage e))]
@@ -335,3 +335,7 @@
                              (g/node-value extensions :project-prototypes ec)))
               (re-create-ext-map env))))))
   (reload-commands! project ui))
+
+#_(-> (dev/project)
+      (g/node-value :editor-extensions)
+      (g/user-data :state))
