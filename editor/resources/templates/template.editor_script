@@ -1,7 +1,7 @@
 local M = {}
 
 function M.get_commands()
-  return {}
+    return {}
 end
 
 return M

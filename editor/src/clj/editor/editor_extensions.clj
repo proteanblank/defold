@@ -5,13 +5,13 @@
             [editor.console :as console]
             [clojure.string :as string]
             [clojure.java.shell :as shell]
-            [schema.core :as s]
+            [clojure.spec.alpha :as s]
             [editor.code.data :as data]
             [editor.resource :as resource]
             [editor.handler :as handler]
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting])
-  (:import [org.luaj.vm2 LuaFunction LuaValue LuaError]))
+  (:import [org.luaj.vm2 LuaFunction LuaValue LuaError Prototype]))
 
 (set! *warn-on-reflection* true)
 
@@ -30,24 +30,23 @@
   (can-execute? [this command]
     "Ask user to execute command (a vector of command name string and argument strings)"))
 
+(defn- add-entry [m k v]
+  (update m k (fnil conj []) v))
+
 (defn- re-create-ext-map [state env]
   (assoc state :ext-map
-               (transduce
-                 (comp
-                   (keep
-                     (fn [prototype]
-                       (try
-                         (s/validate {s/Str LuaFunction}
-                                     (luart/lua->clj (luart/eval prototype env)))
-                         (catch Exception e
-                           (when-let [message (.getMessage e)]
-                             (doseq [line (string/split-lines message)]
-                               (console/append-console-entry! :extension-err line)))
-                           nil))))
-                   cat)
-                 (completing
-                   (fn [m [k v]]
-                     (update m k (fnil conj []) v)))
+               (reduce
+                 (fn [acc ^Prototype proto]
+                   (let [module (luart/lua->clj (luart/eval proto env))]
+                     (if (s/valid? (s/map-of string? any?) module)
+                       (-> acc
+                           (update :all #(reduce-kv add-entry % module))
+                           (cond-> (= "/hooks.editor_script")
+                                   (assoc :hooks module)))
+                       (do
+                         (doseq [line (string/split-lines (s/explain-str (s/map-of string? any?) module))]
+                           (console/append-console-entry! :extension-err line))
+                         acc))))
                  {}
                  (concat (:library-prototypes state)
                          (:project-prototypes state)))))
@@ -128,7 +127,7 @@
   `(g/with-auto-evaluation-context ec#
      (with-execution-context ~project-expr ~ui-expr ec# ~@body)))
 
-(defn- exec [project ui fn-name opts]
+(defn- exec-all [project ui fn-name opts]
   (with-auto-execution-context project ui
     (let [^LuaValue lua-opts (luart/clj->lua opts)]
       (into []
@@ -142,7 +141,7 @@
             (-> project
                 (g/node-value :editor-extensions)
                 (g/user-data :state)
-                (get-in [:ext-map fn-name]))))))
+                (get-in [:ext-map :all fn-name]))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
@@ -235,7 +234,7 @@
                        (comp
                          cat
                          (map #(lua-command->dynamic-command % project ui)))
-                       (exec project ui "get_commands" {}))]
+                       (exec-all project ui "get_commands" {}))]
     (handler/register-dynamic! ::commands commands)))
 
 (defn reload [project kind ui]
