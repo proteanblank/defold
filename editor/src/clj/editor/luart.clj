@@ -1,15 +1,12 @@
 (ns editor.luart
   (:refer-clojure :exclude [read eval])
   (:require [clojure.string :as string]
-            [editor.debugging.mobdebug :as mobdebug]
-            [clojure.java.io :as io]
-            [editor.console :as console]
-            [editor.workspace :as workspace])
+            [editor.console :as console])
   (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
-           [clojure.lang IPersistentVector IPersistentMap Keyword Fn Reduced]
+           [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
-           [org.luaj.vm2.lib.jse JsePlatform JseBaseLib JseMathLib JseIoLib JseOsLib]
-           [java.io PrintStream BufferedWriter Writer PipedInputStream PipedOutputStream BufferedReader InputStreamReader OutputStream ByteArrayInputStream File]
+           [org.luaj.vm2.lib.jse JseBaseLib JseMathLib JseIoLib]
+           [java.io PrintStream ByteArrayInputStream File]
            [org.apache.commons.io.output WriterOutputStream]
            [org.luaj.vm2.compiler LuaC]
            [java.nio.charset Charset]))
@@ -75,10 +72,14 @@
                     (if (.isnil (.arg pair 1))
                       acc
                       (recur (.arg pair 1) (conj! acc (lua->clj pair)))))))]
-      (if (= (mapv first kvs)
-             (range 1 (inc (count kvs))))
+      (if (and (seq kvs)
+               (= (mapv first kvs)
+                  (range 1 (inc (count kvs)))))
         (mapv second kvs)
-        (into (array-map) kvs))))
+        (into (array-map)
+              (map (fn [[k v]]
+                     [(if (string? k) (keyword (string/replace k "_" "-")) k) v]))
+              kvs))))
 
   Keyword
   (clj->lua [k] (LuaValue/valueOf (string/replace (name k) "-" "_")))
@@ -140,17 +141,13 @@
     (.load (StringLib.))
     (.load (CoroutineLib.))
     (.load (JseMathLib.))
-    (.load (JseIoLib.))
-    #_(.load (JseOsLib.))
+    (.load (JseIoLib.)) ;; TODO decide what to do
+    #_(.load (JseOsLib.)) ;; TODO decide what to do
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(console/append-console-entry! :extension-out %))))
     (-> (.-STDERR) (set! (line-print-stream #(console/append-console-entry! :extension-err %))))
     (set-globals! extra-globals)))
-
-(defn evaluate
-  ^LuaValue [^Globals globals ^String str ^String chunk-name]
-  (.call (.load globals str chunk-name)))
 
 (defn read
   ^Prototype [^String chunk chunk-name]
@@ -160,7 +157,3 @@
 
 (defn eval [prototype env]
   (.call (LuaClosure. prototype env)))
-
-#_(let [globals (make-env)
-        closure (lua->clj (.load globals "return function (x) print(x); print(x); print(1 .. 4); print(\"blёp\\nmlep\"); end;"))]
-    (.call (.call closure) (clj->lua {[[:a]] :b})))
