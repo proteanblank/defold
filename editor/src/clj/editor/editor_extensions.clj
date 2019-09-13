@@ -36,10 +36,21 @@
 (defn- lua-fn? [x]
   (instance? LuaFunction x))
 
-(s/def ::get-commands lua-fn?)
-
+(s/def :ext-module/get-commands lua-fn?)
+(s/def :ext-module/on-build-started lua-fn?)
+(s/def :ext-module/on-build-successful lua-fn?)
+(s/def :ext-module/on-build-failed lua-fn?)
+(s/def :ext-module/on-bundle-started lua-fn?)
+(s/def :ext-module/on-bundle-successful lua-fn?)
+(s/def :ext-module/on-bundle-failed lua-fn?)
 (s/def ::module
-  (s/keys :opt-un [::get-commands]))
+  (s/keys :opt-un [:ext-module/get-commands
+                   :ext-module/on-build-started
+                   :ext-module/on-build-successful
+                   :ext-module/on-build-failed
+                   :ext-module/on-bundle-started
+                   :ext-module/on-bundle-successful
+                   :ext-module/on-bundle-failed]))
 
 (s/def :ext-action/action #{"set" "shell"})
 (s/def :ext-action/node-id int?)
@@ -64,8 +75,8 @@
 (s/def :ext-command/cardinality #{"one" "many"})
 (s/def :ext-command/selection (s/keys :req-un [:ext-command/type :ext-command/cardinality]))
 (s/def :ext-command/query (s/keys :opt-un [:ext-command/selection]))
-(s/def :ext-command/active (s/with-gen lua-fn? #(s/gen #{(luart/clj->lua (constantly true))})))
-(s/def :ext-command/run (s/with-gen lua-fn? #(s/gen #{(luart/clj->lua (constantly nil))})))
+(s/def :ext-command/active lua-fn?)
+(s/def :ext-command/run lua-fn?)
 (s/def ::command (s/keys :req-un [:ext-command/label
                                   :ext-command/locations]
                          :opt-un [:ext-command/query
@@ -185,18 +196,22 @@
                 (g/user-data :state)
                 (get-in [:ext-map :all fn-name]))))))
 
-(defn- exec-hook [project ui hook-name opts]
+(defn- exec-hook [project ui hook opts]
   (with-auto-execution-context project ui
     (let [^LuaValue lua-opts (luart/clj->lua opts)]
       (when-let [^LuaFunction f (-> project
                                     (g/node-value :editor-extensions)
                                     (g/user-data :state)
-                                    (get-in [:ext-map :hooks hook-name]))]
+                                    (get-in [:ext-map :hooks hook]))]
         (try
-          (luart/lua->clj (.call f lua-opts))
-          (catch LuaError e
+          (some-> (luart/lua->clj (.call f lua-opts))
+                  (perform-actions! *execution-context*))
+          (catch Exception e
             (doseq [line (string/split-lines (.getMessage e))]
-              (console/append-console-entry! :extension-err (str "ERROR_EXT: " line)))))))))
+              (console/append-console-entry! :extension-err (str "ERROR:EXT: "
+                                                                 (string/replace (name hook) "-" "_")
+                                                                 " failed: "
+                                                                 (.getMessage e))))))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
@@ -309,15 +324,14 @@
                                             (g/node-value :lines ec)
                                             (data/lines-input-stream)))
                                   {"editor" {"get" do-ext-get}})]
-          (cond-> state
-                  (#{:library :all} kind)
-                  (assoc :library-prototypes
-                         (g/node-value extensions :library-prototypes ec))
+          (-> state
+              (assoc :ui ui)
+              (cond-> (#{:library :all} kind)
+                      (assoc :library-prototypes
+                             (g/node-value extensions :library-prototypes ec))
 
-                  (#{:project :all} kind)
-                  (assoc :project-prototypes
-                         (g/node-value extensions :project-prototypes ec))
-
-                  :always
-                  (re-create-ext-map env))))))
+                      (#{:project :all} kind)
+                      (assoc :project-prototypes
+                             (g/node-value extensions :project-prototypes ec)))
+              (re-create-ext-map env))))))
   (reload-commands! project ui))
