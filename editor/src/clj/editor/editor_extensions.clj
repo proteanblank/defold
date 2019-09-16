@@ -11,7 +11,7 @@
             [editor.handler :as handler]
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting])
-  (:import [org.luaj.vm2 LuaFunction LuaError Prototype]))
+  (:import [org.luaj.vm2 LuaFunction LuaError Prototype LuaValue]))
 
 (set! *warn-on-reflection* true)
 
@@ -191,7 +191,7 @@
     (let [lua-opts (luart/clj->lua opts)]
       (into []
             (keep
-              (fn [f]
+              (fn [^LuaValue f]
                 (try
                   (luart/lua->clj (luart/invoke f lua-opts))
                   (catch LuaError e
