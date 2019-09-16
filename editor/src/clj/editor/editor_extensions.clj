@@ -199,19 +199,20 @@
                       (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
             (get-in state [:ext-map :all fn-name])))))
 
-(defn exec-hook! [project hook opts]
-  (with-state [state] project
-    (with-auto-execution-context project (:ui state)
-      (when-let [f (get-in state [:ext-map :hooks hook])]
-        (try
-          (some-> (luart/lua->clj (luart/invoke f (luart/clj->lua opts)))
-                  (perform-actions! *execution-context*))
-          (catch Exception e
-            (console/append-console-entry! :extension-err (str "ERROR:EXT: "
-                                                               (string/replace (name hook) "-" "_")
-                                                               " hook failed:"))
-            (doseq [line (string/split-lines (.getMessage e))]
-              (console/append-console-entry! :extension-err line))))))))
+;; TODO later
+#_(defn exec-hook! [project hook opts]
+    (with-state [state] project
+      (with-auto-execution-context project (:ui state)
+        (when-let [f (get-in state [:ext-map :hooks hook])]
+          (try
+            (some-> (luart/lua->clj (luart/invoke f (luart/clj->lua opts)))
+                    (perform-actions! *execution-context*))
+            (catch Exception e
+              (console/append-console-entry! :extension-err (str "ERROR:EXT: "
+                                                                 (string/replace (name hook) "-" "_")
+                                                                 " hook failed:"))
+              (doseq [line (string/split-lines (.getMessage e))]
+                (console/append-console-entry! :extension-err line))))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
