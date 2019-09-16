@@ -224,7 +224,7 @@
        (let [~cont-sym (partial continue ~acc-sym ~env-sym lua-fn#)]
          ~@body-expr))))
 
-(defmulti gen-selection-query (fn [q acc project]
+(defmulti gen-selection-query (fn [q _acc _project]
                                 (:type q)))
 
 (defn- ensure-selection-cardinality [selection q]
