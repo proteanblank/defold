@@ -83,6 +83,12 @@
                                   :ext-command/active
                                   :ext-command/run]))
 
+(defmacro with-state [[state-sym] project-expr & body]
+  `(let [~state-sym (-> ~project-expr
+                        (g/node-value :editor-extensions)
+                        (g/user-data :state))]
+     ~@body))
+
 (defn- re-create-ext-map [state env]
   (assoc state :ext-map
                (reduce
@@ -180,8 +186,8 @@
   `(g/with-auto-evaluation-context ec#
      (with-execution-context ~project-expr ~ui-expr ec# ~@body)))
 
-(defn- exec-all [project ui fn-name opts]
-  (with-auto-execution-context project ui
+(defn- exec-all [project state fn-name opts]
+  (with-auto-execution-context project (:ui state)
     (let [lua-opts (luart/clj->lua opts)]
       (into []
             (keep
@@ -191,27 +197,21 @@
                   (catch LuaError e
                     (doseq [l (string/split-lines (.getMessage e))]
                       (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
-            (-> project
-                (g/node-value :editor-extensions)
-                (g/user-data :state)
-                (get-in [:ext-map :all fn-name]))))))
+            (get-in state [:ext-map :all fn-name])))))
 
-(defn- exec-hook [project ui hook opts]
-  (with-auto-execution-context project ui
-    (let [lua-opts (luart/clj->lua opts)]
-      (when-let [f (-> project
-                       (g/node-value :editor-extensions)
-                       (g/user-data :state)
-                       (get-in [:ext-map :hooks hook]))]
+(defn exec-hook! [project hook opts]
+  (with-state [state] project
+    (with-auto-execution-context project (:ui state)
+      (when-let [f (get-in state [:ext-map :hooks hook])]
         (try
-          (some-> (luart/lua->clj (luart/invoke f lua-opts))
+          (some-> (luart/lua->clj (luart/invoke f (luart/clj->lua opts)))
                   (perform-actions! *execution-context*))
           (catch Exception e
+            (console/append-console-entry! :extension-err (str "ERROR:EXT: "
+                                                               (string/replace (name hook) "-" "_")
+                                                               " hook failed:"))
             (doseq [line (string/split-lines (.getMessage e))]
-              (console/append-console-entry! :extension-err (str "ERROR:EXT: "
-                                                                 (string/replace (name hook) "-" "_")
-                                                                 " failed: "
-                                                                 (.getMessage e))))))))))
+              (console/append-console-entry! :extension-err line))))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
@@ -261,7 +261,7 @@
         (lua-fn env {})))
     q))
 
-(defn- lua-command->dynamic-command [{:keys [label query active run locations] :as command} project ui]
+(defn- lua-command->dynamic-command [{:keys [label query active run locations] :as command} project state]
   (if (s/valid? ::command command)
     (let [lua-fn->env-fn (compile-query query project)
           contexts (into #{}
@@ -284,13 +284,13 @@
                     (assoc :active?
                            (lua-fn->env-fn
                              (fn [env opts]
-                               (with-execution-context project ui (:evaluation-context env)
+                               (with-execution-context project (:ui state) (:evaluation-context env)
                                  (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))))
                     run
                     (assoc :run
                            (lua-fn->env-fn
                              (fn [_ opts]
-                               (with-auto-execution-context project ui
+                               (with-auto-execution-context project (:ui state)
                                  (future
                                    (error-reporting/catch-all!
                                      (try
@@ -304,13 +304,14 @@
         (console/append-console-entry! :extension-err line))
       nil)))
 
-(defn- reload-commands! [project ui]
-  (let [commands (into []
-                       (comp
-                         cat
-                         (keep #(lua-command->dynamic-command % project ui)))
-                       (exec-all project ui :get-commands {}))]
-    (handler/register-dynamic! ::commands commands)))
+(defn- reload-commands! [project]
+  (with-state [state] project
+    (handler/register-dynamic! ::commands
+                               (into []
+                                     (comp
+                                       cat
+                                       (keep #(lua-command->dynamic-command % project state)))
+                                     (exec-all project state :get-commands {})))))
 
 (defn reload [project kind ui]
   (g/with-auto-evaluation-context ec
@@ -334,8 +335,4 @@
                       (assoc :project-prototypes
                              (g/node-value extensions :project-prototypes ec)))
               (re-create-ext-map env))))))
-  (reload-commands! project ui))
-
-#_(-> (dev/project)
-      (g/node-value :editor-extensions)
-      (g/user-data :state))
+  (reload-commands! project))
