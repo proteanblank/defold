@@ -92,20 +92,23 @@
   "A map with `:project-id` and `:evaluation-context`"
   nil)
 
-(defn execute-with! [project options f]
-  (let [result-promise (promise)
-        state (or (:state options) (ext-state project))]
-    (send (:ext-agent state)
-          (fn [ext-map]
-            (let [evaluation-context (or (:evaluation-context options) (g/make-evaluation-context))]
-              (binding [*execution-context* {:project project
-                                             :evaluation-context evaluation-context
-                                             :ui (:ui state)}]
-                (result-promise (f ext-map))
-                (when-not (contains? options :evaluation-context)
-                  (g/update-cache-from-evaluation-context! evaluation-context))))
-            ext-map))
-    result-promise))
+(defn execute-with!
+  ([project f]
+   (execute-with! project {} f))
+  ([project options f]
+   (let [result-promise (promise)
+         state (or (:state options) (ext-state project))]
+     (send (:ext-agent state)
+           (fn [ext-map]
+             (let [evaluation-context (or (:evaluation-context options) (g/make-evaluation-context))]
+               (binding [*execution-context* {:project project
+                                              :evaluation-context evaluation-context
+                                              :ui (:ui state)}]
+                 (result-promise (f ext-map))
+                 (when-not (contains? options :evaluation-context)
+                   (g/update-cache-from-evaluation-context! evaluation-context))))
+             ext-map))
+     result-promise)))
 
 (defn- execute-all-top-level-functions! [project state fn-keyword opts]
   (execute-with! project {:state state}
@@ -208,6 +211,15 @@
           (executor inputs execution-context)))
       (catch Exception e
         (console/append-console-entry! :extension-err (str "ERROR:EXT: " command-label " failed: " (.getMessage e)))))))
+
+(defn execute-hook! [project hook-keyword opts]
+  @(execute-with! project
+     (fn [ext-map]
+       (some-> (get-in ext-map [:hooks hook-keyword])
+               (as-> lua-fn
+                     (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts))))
+               (perform-actions! (str "hook `" (string/replace (name hook-keyword) "-" "_") "`")
+                                 *execution-context*)))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]

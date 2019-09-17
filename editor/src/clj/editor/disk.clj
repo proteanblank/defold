@@ -9,7 +9,8 @@
             [editor.progress :as progress]
             [editor.resource-watch :as resource-watch]
             [editor.ui :as ui]
-            [editor.workspace :as workspace]))
+            [editor.workspace :as workspace]
+            [editor.editor-extensions :as extensions]))
 
 (set! *warn-on-reflection* true)
 
@@ -181,7 +182,12 @@
                        (let [evaluation-context (g/make-evaluation-context)]
                          (future
                            (try
+                             (extensions/execute-hook! project :on-bundle-started {})
                              (let [result (bob/bob-build! project evaluation-context bob-commands bob-args render-build-progress! task-cancelled?)]
+                               (if (or (:error result)
+                                       (:exception result))
+                                 (extensions/execute-hook! project :on-bundle-failed {})
+                                 (extensions/execute-hook! project :on-bundle-successful {}))
                                (render-build-progress! progress/done)
                                (ui/run-later
                                  (try
