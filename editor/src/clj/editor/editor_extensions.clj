@@ -83,33 +83,63 @@
                                   :ext-command/active
                                   :ext-command/run]))
 
-(defmacro with-state [[state-sym] project-expr & body]
-  `(let [~state-sym (-> ~project-expr
-                        (g/node-value :editor-extensions)
-                        (g/user-data :state))]
-     ~@body))
-
-(defn- re-create-ext-map [state env]
-  (assoc state :ext-map
-               (reduce
-                 (fn [acc ^Prototype proto]
-                   (let [module (luart/lua->clj (luart/eval proto env))]
-                     (if (s/valid? ::module module)
-                       (-> acc
-                           (update :all #(reduce-kv add-entry % module))
-                           (cond-> (= "/hooks.editor_script" (.tojstring (.-source proto)))
-                                   (assoc :hooks module)))
-                       (do
-                         (doseq [line (string/split-lines (s/explain-str ::module module))]
-                           (console/append-console-entry! :extension-err line))
-                         acc))))
-                 {}
-                 (concat (:library-prototypes state)
-                         (:project-prototypes state)))))
+(defn- ext-state [project]
+  (-> project
+      (g/node-value :editor-extensions)
+      (g/user-data :state)))
 
 (def ^:private ^:dynamic *execution-context*
   "A map with `:project-id` and `:evaluation-context`"
   nil)
+
+(defn execute-with! [project options f]
+  (let [result-promise (promise)
+        state (or (:state options) (ext-state project))]
+    (send (:ext-agent state)
+          (fn [ext-map]
+            (let [evaluation-context (or (:evaluation-context options) (g/make-evaluation-context))]
+              (binding [*execution-context* {:project project
+                                             :evaluation-context evaluation-context
+                                             :ui (:ui state)}]
+                (result-promise (f ext-map))
+                (when-not (contains? options :evaluation-context)
+                  (g/update-cache-from-evaluation-context! evaluation-context))))
+            ext-map))
+    result-promise))
+
+(defn- execute-all-top-level-functions! [project state fn-keyword opts]
+  (execute-with! project {:state state}
+    (fn [ext-map]
+      (let [lua-opts (luart/clj->lua opts)]
+        (into []
+              (keep
+                (fn [^LuaValue f]
+                  (try
+                    (luart/lua->clj (luart/invoke f lua-opts))
+                    (catch LuaError e
+                      (doseq [l (string/split-lines (.getMessage e))]
+                        (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
+              (get-in ext-map [:all fn-keyword]))))))
+
+(defn- re-create-ext-agent [state env]
+  (assoc state :ext-agent
+               (agent (reduce
+                        (fn [acc ^Prototype proto]
+                          (let [module (luart/lua->clj (luart/eval proto env))]
+                            (if (s/valid? ::module module)
+                              (-> acc
+                                  (update :all #(reduce-kv add-entry % module))
+                                  (cond-> (= "/hooks.editor_script" (.tojstring (.-source proto)))
+                                          (assoc :hooks module)))
+                              (do
+                                (doseq [line (string/split-lines (s/explain-str ::module module))]
+                                  (console/append-console-entry! :extension-err line))
+                                acc))))
+                        {}
+                        (concat (:library-prototypes state)
+                                (:project-prototypes state)))
+                      :error-handler (fn [_ ex]
+                                       (error-reporting/report-exception! ex)))))
 
 (defn- node-id->type-keyword [node-id ec]
   (let [{:keys [basis]} ec]
@@ -165,54 +195,19 @@
 (defmethod action->batched-executor+input "shell" [action _]
   [shell! (:command action)])
 
-(defn perform-actions! [extension-actions execution-context]
-  (if-not (s/valid? ::actions extension-actions)
-    (doseq [line (string/split-lines (s/explain-str ::actions extension-actions))]
+(defn perform-actions! [actions command-label execution-context]
+  (if-not (s/valid? ::actions actions)
+    (doseq [line (string/split-lines (s/explain-str ::actions actions))]
       (console/append-console-entry! :extension-err line))
-    (let [{:keys [evaluation-context]} execution-context]
-      (doseq [[executor inputs] (eduction (map #(action->batched-executor+input % evaluation-context))
-                                          (partition-by first)
-                                          (map (juxt ffirst #(mapv second %)))
-                                          extension-actions)]
-        (executor inputs execution-context)))))
-
-(defmacro with-execution-context [project-expr ui-expr ec-expr & body]
-  `(binding [*execution-context* {:project ~project-expr
-                                  :evaluation-context ~ec-expr
-                                  :ui ~ui-expr}]
-     ~@body))
-
-(defmacro with-auto-execution-context [project-expr ui-expr & body]
-  `(g/with-auto-evaluation-context ec#
-     (with-execution-context ~project-expr ~ui-expr ec# ~@body)))
-
-(defn- exec-all [project state fn-name opts]
-  (with-auto-execution-context project (:ui state)
-    (let [lua-opts (luart/clj->lua opts)]
-      (into []
-            (keep
-              (fn [^LuaValue f]
-                (try
-                  (luart/lua->clj (luart/invoke f lua-opts))
-                  (catch LuaError e
-                    (doseq [l (string/split-lines (.getMessage e))]
-                      (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
-            (get-in state [:ext-map :all fn-name])))))
-
-;; TODO later
-#_(defn exec-hook! [project hook opts]
-    (with-state [state] project
-      (with-auto-execution-context project (:ui state)
-        (when-let [f (get-in state [:ext-map :hooks hook])]
-          (try
-            (some-> (luart/lua->clj (luart/invoke f (luart/clj->lua opts)))
-                    (perform-actions! *execution-context*))
-            (catch Exception e
-              (console/append-console-entry! :extension-err (str "ERROR:EXT: "
-                                                                 (string/replace (name hook) "-" "_")
-                                                                 " hook failed:"))
-              (doseq [line (string/split-lines (.getMessage e))]
-                (console/append-console-entry! :extension-err line))))))))
+    (try
+      (let [{:keys [evaluation-context]} execution-context]
+        (doseq [[executor inputs] (eduction (map #(action->batched-executor+input % evaluation-context))
+                                            (partition-by first)
+                                            (map (juxt ffirst #(mapv second %)))
+                                            actions)]
+          (executor inputs execution-context)))
+      (catch Exception e
+        (console/append-console-entry! :extension-err (str "ERROR:EXT: " command-label " failed: " (.getMessage e)))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
@@ -285,34 +280,34 @@
                     (assoc :active?
                            (lua-fn->env-fn
                              (fn [env opts]
-                               (with-execution-context project (:ui state) (:evaluation-context env)
-                                 (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))))
+                               (-> project
+                                   (execute-with!
+                                     {:state state
+                                      :evaluation-context (:evaluation-context env)}
+                                     (fn [_]
+                                       (luart/lua->clj (luart/invoke active (luart/clj->lua opts)))))
+                                   (deref 100 false)))))
                     run
                     (assoc :run
                            (lua-fn->env-fn
                              (fn [_ opts]
-                               (with-auto-execution-context project (:ui state)
-                                 (future
-                                   (error-reporting/catch-all!
-                                     (try
-                                       (some-> (luart/lua->clj (luart/invoke run (luart/clj->lua opts)))
-                                               (perform-actions! *execution-context*))
-                                       (catch Exception e
-                                         (console/append-console-entry! :extension-err (str "ERROR:EXT: " label " failed: " (.getMessage e)))))))
-                                 nil)))))})
+                               (execute-with! project {:state state}
+                                 (fn [_]
+                                   (when-let [actions (luart/lua->clj (luart/invoke run (luart/clj->lua opts)))]
+                                     (perform-actions! actions label *execution-context*))))))))})
     (do
       (doseq [line (string/split-lines (s/explain-str ::command command))]
         (console/append-console-entry! :extension-err line))
       nil)))
 
 (defn- reload-commands! [project]
-  (with-state [state] project
-    (handler/register-dynamic! ::commands
-                               (into []
-                                     (comp
-                                       cat
-                                       (keep #(lua-command->dynamic-command % project state)))
-                                     (exec-all project state :get-commands {})))))
+  (let [state (ext-state project)
+        commands (into []
+                       (comp
+                         cat
+                         (keep #(lua-command->dynamic-command % project state)))
+                       @(execute-all-top-level-functions! project state :get-commands {}))]
+    (handler/register-dynamic! ::commands commands)))
 
 (defn reload [project kind ui]
   (g/with-auto-evaluation-context ec
@@ -335,5 +330,5 @@
                       (#{:project :all} kind)
                       (assoc :project-prototypes
                              (g/node-value extensions :project-prototypes ec)))
-              (re-create-ext-map env))))))
+              (re-create-ext-agent env))))))
   (reload-commands! project))
