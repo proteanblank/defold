@@ -722,7 +722,7 @@
                                 :text "If the engine is already running, shut down the process manually and retry"}]}
            :content (.getMessage e)})))))
 
-(defn build-project!
+(defn- build-project!
   [project evaluation-context extra-build-targets old-artifact-map render-progress!]
   (let [game-project (project/get-resource-node project "/game.project" evaluation-context)
         render-progress! (progress/throttle-render-progress render-progress!)]
@@ -739,7 +739,6 @@
   (future
     (try
       (render-build-progress! (progress/make "Building project..." 1))
-      (extensions/execute-hook! project :on-build-started {})
       (let [extra-build-targets (when debug?
                                   (debug-view/build-targets project evaluation-context))
             build-results (ui/with-progress [_ render-build-progress!]
@@ -751,9 +750,6 @@
                                                   [(engine/get-engine project evaluation-context prefs (engine/current-platform)) nil])
                                                 (catch Throwable e
                                                   [nil e])))]
-        (if (:error build-results)
-          (extensions/execute-hook! project :on-build-failed {})
-          (extensions/execute-hook! project :on-build-successful {}))
         (ui/run-later
           (try
             (when result-fn (result-fn build-results engine build-engine-exception))

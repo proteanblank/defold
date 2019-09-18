@@ -1,10 +1,11 @@
 (ns editor.build
-  (:require [editor.progress :as progress]
-            [editor.defold-project :as project]
+  (:require [clojure.set :as set]
             [dynamo.graph :as g]
+            [editor.defold-project :as project]
+            [editor.editor-extensions :as extensions]
             [editor.pipeline :as pipeline]
-            [editor.workspace :as workspace]
-            [clojure.set :as set]))
+            [editor.progress :as progress]
+            [editor.workspace :as workspace]))
 
 (defn- batched-pmap [f batches]
   (->> batches
@@ -28,6 +29,7 @@
 
 (defn build!
   [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
+  (extensions/execute-hook! project :on-build-started {})
   (let [steps (atom [])
         collect-tracer (make-collect-progress-steps-tracer :build-targets steps)
         _ (g/node-value node :build-targets (assoc evaluation-context :dry-run true :tracer collect-tracer))
@@ -41,7 +43,11 @@
         build-targets (cond-> node-build-targets
                               (seq extra-build-targets)
                               (into extra-build-targets))
-        build-dir (workspace/build-path (project/workspace project))]
-    (if (g/error? build-targets)
-      {:error build-targets}
-      (pipeline/build! build-targets build-dir old-artifact-map (progress/nest-render-progress render-progress! (progress/make "" 10 5) 5)))))
+        build-dir (workspace/build-path (project/workspace project))
+        ret (if (g/error? build-targets)
+              {:error build-targets}
+              (pipeline/build! build-targets build-dir old-artifact-map (progress/nest-render-progress render-progress! (progress/make "" 10 5) 5)))]
+    (if (:error ret)
+      (extensions/execute-hook! project :on-build-failed {})
+      (extensions/execute-hook! project :on-build-successful {}))
+    ret))
