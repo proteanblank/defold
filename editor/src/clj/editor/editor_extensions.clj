@@ -92,7 +92,7 @@
   "A map with `:project-id` and `:evaluation-context`"
   nil)
 
-(defn execute-with!
+(defn- execute-with!
   ([project f]
    (execute-with! project {} f))
   ([project options f]
@@ -213,20 +213,21 @@
         (console/append-console-entry! :extension-err (str "ERROR:EXT: " command-label " failed: " (.getMessage e)))))))
 
 (defn execute-hook! [project hook-keyword opts]
-  @(execute-with! project
-     (fn [ext-map]
-       (some-> (get-in ext-map [:hooks hook-keyword])
-               (as-> lua-fn
-                     (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts))))
-               (perform-actions! (str "hook `" (string/replace (name hook-keyword) "-" "_") "`")
-                                 *execution-context*)))))
+  (when-let [state (ext-state project)]
+    @(execute-with! project {:state state}
+       (fn [ext-map]
+         (some-> (get-in ext-map [:hooks hook-keyword])
+                 (as-> lua-fn
+                       (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts))))
+                 (perform-actions! (str "hook `" (string/replace (name hook-keyword) "-" "_") "`")
+                                   *execution-context*))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
                      (lua-fn env (apply f m args)))]
     ((acc new-lua-fn) env)))
 
-(defmacro gen-query [[env-sym cont-sym] acc-sym & body-expr]
+(defmacro gen-query [acc-sym [env-sym cont-sym] & body-expr]
   `(fn [lua-fn#]
      (fn [~env-sym]
        (let [~cont-sym (partial continue ~acc-sym ~env-sym lua-fn#)]
@@ -245,7 +246,7 @@
   (ensure-selection-cardinality (mapv luart/wrap-user-data selection) q))
 
 (defmethod gen-selection-query "resource" [q acc project]
-  (gen-query [env cont] acc
+  (gen-query acc [env cont]
     (let [evaluation-context (or (:evaluation-context env)
                                  (g/make-evaluation-context))
           selection (:selection env)]

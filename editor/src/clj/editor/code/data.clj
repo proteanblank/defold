@@ -434,6 +434,7 @@
   (let [scroll-tab-size (scroll-tab-size document-size canvas-size)
         document-range (- document-size canvas-size)
         scroll-range (- canvas-size scroll-tab-size)]
+    ;; FIXME can be divide by zero if canvas height is the same as scroll tab height
     (/ document-range scroll-range)))
 
 (defn max-line-width
