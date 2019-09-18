@@ -289,11 +289,6 @@
   ([project evaluation-context]
    (g/node-value project :workspace evaluation-context)))
 
-(defn make-collect-progress-steps-tracer [watched-label steps-atom]
-  (fn [state node output-type label]
-    (when (and (= label watched-label) (= state :begin) (= output-type :output))
-      (swap! steps-atom conj node))))
-
 (defn make-count-progress-steps-tracer [watched-label ^AtomicLong step-count]
   (fn [state node output-type label]
     (when (and (= label watched-label) (= state :begin) (= output-type :output))
@@ -325,41 +320,6 @@
 
           :fail
           nil)))))
-
-(defn- batched-pmap [f batches]
-  (->> batches
-       (pmap (fn [batch] (doall (map f batch))))
-       (reduce concat)
-       doall))
-
-(defn- available-processors []
-  (.. Runtime getRuntime availableProcessors))
-
-(defn- compiling-progress-message [node-id->resource-path node-id]
-  (if (nil? node-id)
-    "Compiling..."
-    (when-some [resource-path (node-id->resource-path node-id)]
-      (str "Compiling " resource-path))))
-
-(defn build!
-  [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
-  (let [steps (atom [])
-        collect-tracer (make-collect-progress-steps-tracer :build-targets steps)
-        _ (g/node-value node :build-targets (assoc evaluation-context :dry-run true :tracer collect-tracer))
-        progress-message-fn (partial compiling-progress-message (set/map-invert (g/node-value project :nodes-by-resource-path evaluation-context)))
-        step-count (count @steps)
-        progress-tracer (make-progress-tracer :build-targets step-count progress-message-fn (progress/nest-render-progress render-progress! (progress/make "" 10) 5))
-        evaluation-context-with-progress-trace (assoc evaluation-context :tracer progress-tracer)
-        prewarm-partitions (partition-all (max (quot step-count (+ (available-processors) 2)) 1000) (rseq @steps))
-        _ (batched-pmap (fn [node-id] (g/node-value node-id :build-targets evaluation-context-with-progress-trace)) prewarm-partitions)
-        node-build-targets (g/node-value node :build-targets evaluation-context)
-        build-targets (cond-> node-build-targets
-                        (seq extra-build-targets)
-                        (into extra-build-targets))
-        build-dir (workspace/build-path (workspace project))]
-    (if (g/error? build-targets)
-      {:error build-targets}
-      (pipeline/build! build-targets build-dir old-artifact-map (progress/nest-render-progress render-progress! (progress/make "" 10 5) 5)))))
 
 (handler/defhandler :undo :global
   (enabled? [project-graph] (g/has-undo? project-graph))
@@ -641,17 +601,6 @@
   (let [resource-path-to-node (g/node-value project :nodes-by-resource-path)
         resources        (resource/filter-resources (g/node-value project :resources) query)]
     (map (fn [r] [r (get resource-path-to-node (resource/proj-path r))]) resources)))
-
-(defn build-project!
-  [project evaluation-context extra-build-targets old-artifact-map render-progress!]
-  (let [game-project  (get-resource-node project "/game.project" evaluation-context)
-        render-progress! (progress/throttle-render-progress render-progress!)]
-    (try
-      (ui/with-progress [render-progress! render-progress!]
-        (build! project game-project evaluation-context extra-build-targets old-artifact-map render-progress!))
-      (catch Throwable error
-        (error-reporting/report-exception! error)
-        nil))))
 
 (defn settings [project]
   (g/node-value project :settings))

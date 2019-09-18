@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [dynamo.graph :as g]
+            [editor.build :as build]
             [editor.build-errors-view :as build-errors-view]
             [editor.bundle :as bundle]
             [editor.bundle-dialog :as bundle-dialog]
@@ -721,6 +722,17 @@
                                 :text "If the engine is already running, shut down the process manually and retry"}]}
            :content (.getMessage e)})))))
 
+(defn build-project!
+  [project evaluation-context extra-build-targets old-artifact-map render-progress!]
+  (let [game-project (project/get-resource-node project "/game.project" evaluation-context)
+        render-progress! (progress/throttle-render-progress render-progress!)]
+    (try
+      (ui/with-progress [render-progress! render-progress!]
+        (build/build! project game-project evaluation-context extra-build-targets old-artifact-map render-progress!))
+      (catch Throwable error
+        (error-reporting/report-exception! error)
+        nil))))
+
 (defn async-build! [project evaluation-context prefs {:keys [debug? engine?] :or {debug? false engine? true}} old-artifact-map render-build-progress! result-fn]
   (assert (not @build-in-progress?))
   (reset! build-in-progress? true)
@@ -731,7 +743,7 @@
       (let [extra-build-targets (when debug?
                                   (debug-view/build-targets project evaluation-context))
             build-results (ui/with-progress [_ render-build-progress!]
-                            (project/build-project! project evaluation-context extra-build-targets old-artifact-map render-build-progress!))
+                            (build-project! project evaluation-context extra-build-targets old-artifact-map render-build-progress!))
             [engine build-engine-exception] (when (and engine? (nil? (:error build-results)))
                                               (try
                                                 (ui/with-progress [_ render-build-progress!]
