@@ -67,7 +67,7 @@
   (s/keys :req-un [:ext-action/action
                    :ext-action/command]))
 (s/def ::action (s/multi-spec action-spec :action))
-(s/def ::actions (s/coll-of ::action))
+(s/def ::actions (s/coll-of ::action :kind vector?))
 
 (s/def :ext-command/label string?)
 (s/def :ext-command/locations (s/coll-of #{"Edit" "View" "Assets" "Outline"} :distinct true :min-count 1))
@@ -93,6 +93,8 @@
   nil)
 
 (defn- execute-with!
+  "Executes function passing it an ext-map on an agent thread, returns a future
+  with result of that function execution"
   ([project f]
    (execute-with! project {} f))
   ([project options f]
@@ -104,11 +106,37 @@
                (binding [*execution-context* {:project project
                                               :evaluation-context evaluation-context
                                               :ui (:ui state)}]
-                 (result-promise (f ext-map))
+                 (result-promise (try
+                                   [nil (f ext-map)]
+                                   (catch Exception e
+                                     [e nil])))
                  (when-not (contains? options :evaluation-context)
                    (g/update-cache-from-evaluation-context! evaluation-context))))
              ext-map))
-     result-promise)))
+     (future (let [[err ret] @result-promise]
+               (if err
+                 (throw err)
+                 ret))))))
+
+(defn- report-extension-error [label ^Exception ex]
+  (let [message (str "ERROR:EXT: "
+                     label " failed: \n"
+                     (if-let [problems (::s/problems (ex-data ex))]
+                       (string/join "\n" (->> problems
+                                              (map #(str (:val %) " is not " (:pred %)))))
+                       (.getMessage ex)))]
+    (doseq [line (string/split-lines message)]
+      (console/append-console-entry! :extension-err line))))
+
+(defmacro try-with-extension-exceptions [label-expr & body]
+  `(try
+     ~@body
+     (catch Exception e#
+       (report-extension-error ~label-expr e#)
+       (throw e#))))
+
+(defmacro ignore-exceptions [& body]
+  `(try ~@body (catch Exception ~'_)))
 
 (defn- execute-all-top-level-functions! [project state fn-keyword opts]
   (execute-with! project {:state state}
@@ -117,11 +145,9 @@
         (into []
               (keep
                 (fn [^LuaValue f]
-                  (try
-                    (luart/lua->clj (luart/invoke f lua-opts))
-                    (catch LuaError e
-                      (doseq [l (string/split-lines (.getMessage e))]
-                        (console/append-console-entry! :extension-err (str "ERROR:EXT: " l)))))))
+                  (ignore-exceptions
+                    (try-with-extension-exceptions fn-keyword
+                      (luart/lua->clj (luart/invoke f lua-opts))))))
               (get-in ext-map [:all fn-keyword]))))))
 
 (defn- re-create-ext-agent [state env]
@@ -198,19 +224,18 @@
 (defmethod action->batched-executor+input "shell" [action _]
   [shell! (:command action)])
 
-(defn perform-actions! [actions command-label execution-context]
-  (if-not (s/valid? ::actions actions)
-    (doseq [line (string/split-lines (s/explain-str ::actions actions))]
-      (console/append-console-entry! :extension-err line))
-    (try
-      (let [{:keys [evaluation-context]} execution-context]
-        (doseq [[executor inputs] (eduction (map #(action->batched-executor+input % evaluation-context))
-                                            (partition-by first)
-                                            (map (juxt ffirst #(mapv second %)))
-                                            actions)]
-          (executor inputs execution-context)))
-      (catch Exception e
-        (console/append-console-entry! :extension-err (str "ERROR:EXT: " command-label " failed: " (.getMessage e)))))))
+(defn- ensure-spec [spec x]
+  (if (s/valid? spec x)
+    x
+    (throw (ex-info "Spec assertion failed" (s/explain-data spec x)))))
+
+(defn- perform-actions! [actions execution-context]
+  (let [{:keys [evaluation-context]} execution-context]
+    (doseq [[executor inputs] (eduction (map #(action->batched-executor+input % evaluation-context))
+                                        (partition-by first)
+                                        (map (juxt ffirst #(mapv second %)))
+                                        (ensure-spec ::actions actions))]
+      (executor inputs execution-context))))
 
 (defn execute-hook! [project hook-keyword opts]
   (when-let [state (ext-state project)]
@@ -219,7 +244,7 @@
          (some-> (get-in ext-map [:hooks hook-keyword])
                  (as-> lua-fn
                        (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts))))
-                 (perform-actions! (str "hook `" (string/replace (name hook-keyword) "-" "_") "`")
+                 (perform-actions! #_(str "hook `" (string/replace (name hook-keyword) "-" "_") "`")
                                    *execution-context*))))))
 
 (defn- continue [acc env lua-fn f & args]
@@ -307,7 +332,7 @@
                                (execute-with! project {:state state}
                                  (fn [_]
                                    (when-let [actions (luart/lua->clj (luart/invoke run (luart/clj->lua opts)))]
-                                     (perform-actions! actions label *execution-context*))))))))})
+                                     (perform-actions! actions #_label *execution-context*))))))))})
     (do
       (doseq [line (string/split-lines (s/explain-str ::command command))]
         (console/append-console-entry! :extension-err line))

@@ -728,7 +728,7 @@
         render-progress! (progress/throttle-render-progress render-progress!)]
     (try
       (ui/with-progress [render-progress! render-progress!]
-        (build/build! project game-project evaluation-context extra-build-targets old-artifact-map render-progress!))
+        (build/build-project! project game-project evaluation-context extra-build-targets old-artifact-map render-progress!))
       (catch Throwable error
         (error-reporting/report-exception! error)
         nil))))

@@ -17,6 +17,9 @@
   :editor.editor-extensions/execute-lua :only-indent
   :editor.editor-extensions/execute-with! :only-indent
   :editor.editor-extensions/execute-with-2! :only-indent
+  :editor.editor-extensions/gen-query :only-indent
+  :editor.editor-extensions/try-with-extension-errors :only-indent
+  :editor.editor-extensions/try-with-extension-exceptions :only-indent
   :editor.editor-extensions/with-auto-execution-context :only-indent
   :editor.editor-extensions/with-execution-context :only-indent
   :editor.file-test/with-temp-dir :only-indent

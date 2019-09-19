@@ -75,7 +75,7 @@
             (with-open [_ (make-restore-point!)]
               (add-component-from-file! workspace game-object component-resource-path)
               (let [old-artifact-map (workspace/artifact-map workspace)
-                    build-results (build/build! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
+                    build-results (build/build-project! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
                     error-value (:error build-results)]
                 (if (is (some? error-value) component-resource-path)
                   (let [error-tree (build-errors-view/build-resource-tree error-value)]
@@ -114,7 +114,7 @@
             (with-open [_ (make-restore-point!)]
               (add-fn resource-path)
               (let [old-artifact-map (workspace/artifact-map workspace)
-                    build-results (build/build! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
+                    build-results (build/build-project! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
                     error-value (:error build-results)]
                 (if (is (some? error-value) resource-path)
                   (let [error-tree (build-errors-view/build-resource-tree error-value)]
@@ -144,7 +144,7 @@
                         "/errors/window_using_panel_break_button.gui"]]
             (add-component-from-file! workspace game-object path))
           (let [old-artifact-map (workspace/artifact-map workspace)
-                build-results (build/build! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
+                build-results (build/build-project! project main-collection (g/make-evaluation-context) nil old-artifact-map progress/null-render-progress!)
                 error-value (:error build-results)]
             (if (is (some? error-value))
               (let [error-tree (build-errors-view/build-resource-tree error-value)]

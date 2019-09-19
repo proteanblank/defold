@@ -261,7 +261,7 @@
            ~'resource-node     (test-util/resource-node ~'project ~path)
            evaluation-context# (g/make-evaluation-context)
            old-artifact-map#   (workspace/artifact-map ~'workspace)
-           ~'build-results     (build/build! ~'project ~'resource-node evaluation-context# nil old-artifact-map# progress/null-render-progress!)
+           ~'build-results     (build/build-project! ~'project ~'resource-node evaluation-context# nil old-artifact-map# progress/null-render-progress!)
            ~'build-artifacts   (:artifacts ~'build-results)
            ~'_                 (when-not (contains? ~'build-results :error)
                                  (workspace/artifact-map! ~'workspace (:artifact-map ~'build-results))
@@ -309,7 +309,7 @@
 (defn- project-build [project resource-node evaluation-context]
   (let [workspace (project/workspace project)
         old-artifact-map (workspace/artifact-map workspace)
-        build-results (build/build! project resource-node evaluation-context nil old-artifact-map progress/null-render-progress!)]
+        build-results (build/build-project! project resource-node evaluation-context nil old-artifact-map progress/null-render-progress!)]
     (when-not (contains? build-results :error)
       (workspace/artifact-map! workspace (:artifact-map build-results))
       (workspace/etags! workspace (:etags build-results)))

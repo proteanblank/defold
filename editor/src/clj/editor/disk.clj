@@ -182,6 +182,7 @@
                        (let [evaluation-context (g/make-evaluation-context)]
                          (future
                            (try
+                             ;; todo start earlier to save changes from actions?
                              (extensions/execute-hook! project :on-bundle-started {})
                              (let [result (bob/bob-build! project evaluation-context bob-commands bob-args render-build-progress! task-cancelled?)]
                                (if (or (:error result)

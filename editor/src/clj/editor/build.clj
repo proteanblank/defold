@@ -27,7 +27,7 @@
     (when (and (= label watched-label) (= state :begin) (= output-type :output))
       (swap! steps-atom conj node))))
 
-(defn build!
+(defn build-project!
   [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
   (extensions/execute-hook! project :on-build-started {})
   (let [steps (atom [])
