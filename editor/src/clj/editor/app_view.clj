@@ -1867,7 +1867,13 @@ If you do not specifically require different script states, consider changing th
                                       :result true}]}))]
             (when allow
               (prefs/set-prefs prefs "editor-extensions/allowed-commands" (conj allowed-commands cmd-name)))
-            allow))))))
+            allow))))
+    (display-output! [_ type string]
+      (let [[console-type prefix] (case type
+                                    :err [:extension-err "ERROR:EXT: "]
+                                    :out [:extension-out ""])]
+        (doseq [line (string/split-lines string)]
+          (console/append-console-entry! console-type (str prefix line)))))))
 
 (defn- fetch-libraries [workspace project dashboard-client changes-view prefs]
   (let [library-uris (project/project-dependencies project)

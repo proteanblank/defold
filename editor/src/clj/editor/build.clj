@@ -29,6 +29,7 @@
 
 (defn build-project!
   [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
+  ;; TODO catch exception and report as build error!
   (extensions/execute-hook! project :on-build-started {})
   (let [steps (atom [])
         collect-tracer (make-collect-progress-steps-tracer :build-targets steps)

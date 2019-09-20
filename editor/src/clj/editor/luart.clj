@@ -1,7 +1,6 @@
 (ns editor.luart
   (:refer-clojure :exclude [read eval])
-  (:require [clojure.string :as string]
-            [editor.console :as console])
+  (:require [clojure.string :as string])
   (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
@@ -129,7 +128,7 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [resource-path->input-stream extra-globals]
+  ^Globals [resource-path->input-stream extra-globals display-output!]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
@@ -145,8 +144,8 @@
     #_(.load (JseOsLib.)) ;; TODO decide what to do
     (LoadState/install)
     (LuaC/install)
-    (-> (.-STDOUT) (set! (line-print-stream #(console/append-console-entry! :extension-out %))))
-    (-> (.-STDERR) (set! (line-print-stream #(console/append-console-entry! :extension-err %))))
+    (-> (.-STDOUT) (set! (line-print-stream #(display-output! :out %))))
+    (-> (.-STDERR) (set! (line-print-stream #(display-output! :err %))))
     (set-globals! extra-globals)))
 
 (defn read
