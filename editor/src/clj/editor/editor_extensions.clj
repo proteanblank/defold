@@ -11,14 +11,17 @@
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting]
             [editor.util :as util])
-  (:import [org.luaj.vm2 LuaFunction Prototype LuaValue]
+  (:import [org.luaj.vm2 LuaFunction Prototype LuaValue LuaError]
            [clojure.lang MultiFn]))
 
 (set! *warn-on-reflection* true)
 
+(defn- unwrap-error-values [arr]
+  (mapv #(cond-> % (g/error? %) :value) arr))
+
 (g/defnode EditorExtensions
-  (input project-prototypes g/Any :array :substitute gu/array-subst-remove-errors)
-  (input library-prototypes g/Any :array :substitute gu/array-subst-remove-errors)
+  (input project-prototypes g/Any :array :substitute unwrap-error-values)
+  (input library-prototypes g/Any :array :substitute unwrap-error-values)
   (output project-prototypes g/Any (gu/passthrough project-prototypes))
   (output library-prototypes g/Any (gu/passthrough library-prototypes)))
 
@@ -248,26 +251,39 @@
 (def ^:private hooks-file-path "/hooks.editor_script")
 
 (defn- re-create-ext-agent [state env]
-  (assoc state :ext-agent
-               (agent (reduce
-                        (fn [acc ^Prototype proto]
-                          (let [proto-path (.tojstring (.-source proto))]
-                            (if-let [module (try-with-extension-exceptions
-                                              {:label "Loading"
-                                               :path proto-path
-                                               :default nil
-                                               :ui (:ui state)}
-                                              (ensure-spec ::module (luart/lua->clj (luart/eval proto env))))]
-                              (-> acc
-                                  (update :all add-all-entry proto-path module)
-                                  (cond-> (= hooks-file-path proto-path)
-                                          (assoc :hooks module)))
-                              acc)))
-                        {}
-                        (concat (:library-prototypes state)
-                                (:project-prototypes state)))
-                      :error-handler (fn [_ ex]
-                                       (error-reporting/report-exception! ex)))))
+  (assoc state
+    :ext-agent
+    (agent (reduce
+             (fn [acc x]
+               (cond
+                 (instance? LuaError x)
+                 (handle-extension-error {:label "Compilation"
+                                          :ui (:ui state)
+                                          :default acc}
+                                         x)
+
+                 (instance? Prototype x)
+                 (let [^Prototype proto x
+                       proto-path (.tojstring (.-source proto))]
+                   (if-let [module (try-with-extension-exceptions
+                                     {:label "Loading"
+                                      :path proto-path
+                                      :default nil
+                                      :ui (:ui state)}
+                                     (ensure-spec ::module (luart/lua->clj (luart/eval proto env))))]
+                     (-> acc
+                         (update :all add-all-entry proto-path module)
+                         (cond-> (= hooks-file-path proto-path)
+                                 (assoc :hooks module)))
+                     acc))
+
+                 :else
+                 (throw (ex-info (str "Unexpected prototype value: " x) {:prototype x}))))
+             {}
+             (concat (:library-prototypes state)
+                     (:project-prototypes state)))
+           :error-handler (fn [_ ex]
+                            (error-reporting/report-exception! ex)))))
 
 (defn- node-id->type-keyword [node-id ec]
   (let [{:keys [basis]} ec]
@@ -485,4 +501,5 @@
               (re-create-ext-agent env))))))
   (reload-commands! project))
 
-#_(g/user-data (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1)))) :state)
+#_(-> (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1))))
+      (g/node-value :project-prototypes))
