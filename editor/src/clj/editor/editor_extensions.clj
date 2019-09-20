@@ -35,9 +35,6 @@
     "Display extension output, `type` is either `:out` or `:err`, string may be
     multiline"))
 
-(defn- add-entry [m k v]
-  (update m k (fnil conj []) v))
-
 (defn- lua-fn? [x]
   (instance? LuaFunction x))
 
@@ -72,7 +69,7 @@
   (s/keys :req-un [:ext-action/action
                    :ext-action/command]))
 (s/def ::action (s/multi-spec action-spec :action))
-(s/def ::actions (s/coll-of ::action :kind vector?))
+(s/def ::actions (s/coll-of ::action))
 
 (s/def :ext-command/label string?)
 (s/def :ext-command/locations (s/coll-of #{"Edit" "View" "Assets" "Outline"}
@@ -88,7 +85,7 @@
                          :opt-un [:ext-command/query
                                   :ext-command/active
                                   :ext-command/run]))
-(s/def ::commands (s/coll-of ::command :kind vector?))
+(s/def ::commands (s/coll-of ::command))
 
 (defn- ext-state [project]
   (-> project
@@ -151,6 +148,7 @@
         (let [unqualified (symbol (name pred))]
           (case unqualified
             (coll? vector?) "is not an array"
+            int? "is not an int"
             string? "is not a string"
             lua-fn? "is not a function"
             action-spec (str "needs \"action\" key to be "
@@ -177,56 +175,77 @@
           (str "needs at least " (second pred) " element" (when (< 1 (second pred)) "s"))))
       (pr-str pred)))
 
-(defn- report-extension-error [ui label ^Exception ex]
-  (let [message (str label " failed: \n"
+(defn- handle-extension-error [options ^Exception ex]
+  (let [message (str (:label options "Extension")
+                     (when-let [path (:path options)]
+                       (str " in " path))
+                     " failed: \n"
                      (if-let [problems (::s/problems (ex-data ex))]
                        (do
                          (clojure.pprint/pprint problems)
                          (string/join "\n" (->> problems
                                                 (map #(str (->lua-string (:val %)) " "
                                                            (spec-pred->reason (s/abbrev (:pred %))))))))
-                       (.getMessage ex)))]
-    (display-output! ui :err message)))
+                       (.getMessage ex)))
+        default (:default options ::re-throw)]
+    (display-output! (:ui options) :err message)
+    (if (= ::re-throw default)
+      (throw ex)
+      default)))
 
 (defmacro ^:private try-with-extension-exceptions
   "Execute body with thrown exceptions being reported to user
 
   Available options:
   - `:ui` (required) - ui used to report exceptions
+  - `:path` (optional) - file path to extension related to `body` execution
   - `:label` (optional, default \"Extension\") - description of a thing that may
     throw exception
   - `:default` (optional) - default value that is returned
     from this macro if `body` throws exception, will re-throw exception if this
     option is not provided"
   [options-expr & body]
-  `(let [options# ~options-expr
-         label# (:label options# "Extension")
-         default# (:default options# ::re-throw)]
-     (try
-       ~@body
-       (catch Exception e#
-         (report-extension-error (:ui options#) label# e#)
-         (if (= default# ::re-throw)
-           (throw e#)
-           default#)))))
+  `(try
+     ~@body
+     (catch Exception e#
+       (handle-extension-error ~options-expr e#))))
 
 (defn- ensure-spec [spec x]
   (if (s/valid? spec x)
     x
     (throw (ex-info "Spec assertion failed" (s/explain-data spec x)))))
 
-(defn- execute-all-top-level-functions! [project state fn-keyword opts]
+(defn- execute-all-top-level-functions!
+  "Executes all top-level editor script function defined by `fn-keyword`
+
+  Returns a vector of [`path` `ret`] tuples, removing all results that threw
+  exception, where:
+  - `path` is a file path of editor script
+  - `ret` is a clojure data structure returned from function in that file"
+  [project state fn-keyword opts]
   @(execute-with! project {:state state}
      (fn [ext-map]
        (let [lua-opts (luart/clj->lua opts)]
          (into []
                (keep
-                 (fn [^LuaValue f]
-                   (try-with-extension-exceptions {:ui (:ui state)
-                                                   :label (->lua-string fn-keyword)
-                                                   :default nil}
-                     (luart/lua->clj (luart/invoke f lua-opts)))))
+                 (fn [[file-path ^LuaValue f]]
+                   (when-let [ret (try-with-extension-exceptions
+                                    {:ui (:ui state)
+                                     :path file-path
+                                     :label (->lua-string fn-keyword)
+                                     :default nil}
+                                    (luart/lua->clj (luart/invoke f lua-opts)))]
+                     [file-path ret])))
                (get-in ext-map [:all fn-keyword]))))))
+
+(defn- add-all-entry [m path module]
+  (reduce-kv
+    (fn [acc k v]
+      (update acc k (fnil conj []) [path v]))
+    m
+    module))
+
+(def ^:private hooks-file-path "/hooks.editor_script")
 
 (defn- re-create-ext-agent [state env]
   (assoc state :ext-agent
@@ -234,13 +253,14 @@
                         (fn [acc ^Prototype proto]
                           (let [proto-path (.tojstring (.-source proto))]
                             (if-let [module (try-with-extension-exceptions
-                                              {:label (str "Loading " proto-path)
+                                              {:label "Loading"
+                                               :path proto-path
                                                :default nil
                                                :ui (:ui state)}
                                               (ensure-spec ::module (luart/lua->clj (luart/eval proto env))))]
                               (-> acc
-                                  (update :all #(reduce-kv add-entry % module))
-                                  (cond-> (= "/hooks.editor_script" proto-path)
+                                  (update :all add-all-entry proto-path module)
+                                  (cond-> (= hooks-file-path proto-path)
                                           (assoc :hooks module)))
                               acc)))
                         {}
@@ -319,6 +339,7 @@
     @(execute-with! project {:state state :report-exceptions false}
        (fn [ext-map]
          (try-with-extension-exceptions {:label (str "hook " (->lua-string hook-keyword))
+                                         :path hooks-file-path
                                          :ui (:ui state)}
            (some-> (get-in ext-map [:hooks hook-keyword])
                    (as-> lua-fn
@@ -373,7 +394,7 @@
         (lua-fn env {})))
     q))
 
-(defn- lua-command->dynamic-command [{:keys [label query active run locations] :as command} project state]
+(defn- command->dynamic-handler [{:keys [label query active run locations]} path project state]
   (let [lua-fn->env-fn (compile-query query project)
         contexts (into #{}
                        (map {"Assets" :asset-browser
@@ -402,6 +423,7 @@
                                    (fn [_]
                                      (try-with-extension-exceptions {:label (str label "'s \"active\"")
                                                                      :default false
+                                                                     :path path
                                                                      :ui (:ui state)}
                                        (luart/lua->clj (luart/invoke active (luart/clj->lua opts))))))
                                  (deref 100 false)))))
@@ -413,26 +435,30 @@
                                (fn [_]
                                  (try-with-extension-exceptions {:label (str label "'s \"run\"")
                                                                  :default nil
+                                                                 :path path
                                                                  :ui (:ui state)}
                                    (when-let [actions (luart/lua->clj (luart/invoke run (luart/clj->lua opts)))]
                                      (perform-actions! actions *execution-context*)))))))))}))
 
 (defn- reload-commands! [project]
-  (let [state (ext-state project)
-        commands (into []
-                       (comp
-                         (mapcat #(try-with-extension-exceptions
-                                    {:label "Reloading commands"
+  (let [state (ext-state project)]
+    (handler/register-dynamic! ::commands
+      (for [[path ret] (execute-all-top-level-functions! project state :get-commands {})
+            :let [commands (try-with-extension-exceptions
+                             {:label "Reloading commands"
+                              :default nil
+                              :path path
+                              :ui (:ui state)}
+                             (ensure-spec ::commands ret))]
+            command commands
+            :let [dynamic-handler (try-with-extension-exceptions
+                                    {:label (:label command "Reloaded command")
+                                     :path path
                                      :default nil
                                      :ui (:ui state)}
-                                    (ensure-spec ::commands %)))
-                         (keep #(try-with-extension-exceptions
-                                  {:label (:label % "Reloaded command")
-                                   :default nil
-                                   :ui (:ui state)}
-                                  (lua-command->dynamic-command % project state))))
-                       (execute-all-top-level-functions! project state :get-commands {}))]
-    (handler/register-dynamic! ::commands commands)))
+                                    (command->dynamic-handler command path project state))]
+            :when dynamic-handler]
+        dynamic-handler))))
 
 (defn reload [project kind ui]
   (g/with-auto-evaluation-context ec
@@ -458,3 +484,5 @@
                              (g/node-value extensions :project-prototypes ec)))
               (re-create-ext-agent env))))))
   (reload-commands! project))
+
+#_(g/user-data (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1)))) :state)
