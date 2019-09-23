@@ -1,6 +1,7 @@
 (ns editor.editor-extensions
   (:require [dynamo.graph :as g]
             [editor.graph-util :as gu]
+            [clojure.stacktrace :as stacktrace]
             [editor.luart :as luart]
             [clojure.string :as string]
             [clojure.java.shell :as shell]
@@ -10,7 +11,8 @@
             [editor.handler :as handler]
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting]
-            [editor.util :as util])
+            [editor.util :as util]
+            [editor.console :as console])
   (:import [org.luaj.vm2 LuaFunction Prototype LuaValue LuaError]
            [clojure.lang MultiFn]))
 
@@ -248,7 +250,7 @@
     m
     module))
 
-(def ^:private hooks-file-path "/hooks.editor_script")
+(def hooks-file-path "/hooks.editor_script")
 
 (defn- re-create-ext-agent [state env]
   (assoc state
@@ -501,5 +503,18 @@
               (re-create-ext-agent env))))))
   (reload-commands! project))
 
-#_(-> (first (filter #(g/node-instance? EditorExtensions %) (g/node-ids (g/graph 1))))
-      (g/node-value :project-prototypes))
+(defn Exception->error
+  "Convert exception thrown by extension hook to graph error value"
+  [project ^Throwable ex]
+  (let [^Throwable root (stacktrace/root-cause ex)
+        message (ex-message root)
+        [_ file line :as match] (re-find console/line-sub-regions-pattern message)]
+    (g/map->error
+      (cond-> {:_node-id (or (when match (project/get-resource-node project file))
+                             (project/get-resource-node project hooks-file-path))
+               :message message
+               :severity :fatal}
+
+              line
+              (assoc-in [:user-data :cursor-range]
+                        (data/line-number->CursorRange (Integer/parseInt line)))))))

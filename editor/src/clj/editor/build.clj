@@ -29,26 +29,32 @@
 
 (defn build-project!
   [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
-  ;; TODO catch exception and report as build error!
-  (extensions/execute-hook! project :on-build-started {})
-  (let [steps (atom [])
-        collect-tracer (make-collect-progress-steps-tracer :build-targets steps)
-        _ (g/node-value node :build-targets (assoc evaluation-context :dry-run true :tracer collect-tracer))
-        progress-message-fn (partial compiling-progress-message (set/map-invert (g/node-value project :nodes-by-resource-path evaluation-context)))
-        step-count (count @steps)
-        progress-tracer (project/make-progress-tracer :build-targets step-count progress-message-fn (progress/nest-render-progress render-progress! (progress/make "" 10) 5))
-        evaluation-context-with-progress-trace (assoc evaluation-context :tracer progress-tracer)
-        prewarm-partitions (partition-all (max (quot step-count (+ (available-processors) 2)) 1000) (rseq @steps))
-        _ (batched-pmap (fn [node-id] (g/node-value node-id :build-targets evaluation-context-with-progress-trace)) prewarm-partitions)
-        node-build-targets (g/node-value node :build-targets evaluation-context)
-        build-targets (cond-> node-build-targets
-                              (seq extra-build-targets)
-                              (into extra-build-targets))
-        build-dir (workspace/build-path (project/workspace project))
-        ret (if (g/error? build-targets)
-              {:error build-targets}
-              (pipeline/build! build-targets build-dir old-artifact-map (progress/nest-render-progress render-progress! (progress/make "" 10 5) 5)))]
-    (if (:error ret)
-      (extensions/execute-hook! project :on-build-failed {})
-      (extensions/execute-hook! project :on-build-successful {}))
-    ret))
+  (if-let [extension-error (try
+                             (extensions/execute-hook! project :on-build-started {})
+                             nil
+                             (catch Exception e
+                               (extensions/Exception->error project e)))]
+    {:error extension-error}
+    (let [steps (atom [])
+          collect-tracer (make-collect-progress-steps-tracer :build-targets steps)
+          _ (g/node-value node :build-targets (assoc evaluation-context :dry-run true :tracer collect-tracer))
+          progress-message-fn (partial compiling-progress-message (set/map-invert (g/node-value project :nodes-by-resource-path evaluation-context)))
+          step-count (count @steps)
+          progress-tracer (project/make-progress-tracer :build-targets step-count progress-message-fn (progress/nest-render-progress render-progress! (progress/make "" 10) 5))
+          evaluation-context-with-progress-trace (assoc evaluation-context :tracer progress-tracer)
+          prewarm-partitions (partition-all (max (quot step-count (+ (available-processors) 2)) 1000) (rseq @steps))
+          _ (batched-pmap (fn [node-id] (g/node-value node-id :build-targets evaluation-context-with-progress-trace)) prewarm-partitions)
+          node-build-targets (g/node-value node :build-targets evaluation-context)
+          build-targets (cond-> node-build-targets
+                                (seq extra-build-targets)
+                                (into extra-build-targets))
+          build-dir (workspace/build-path (project/workspace project))
+          ret (if (g/error? build-targets)
+                {:error build-targets}
+                (pipeline/build! build-targets build-dir old-artifact-map (progress/nest-render-progress render-progress! (progress/make "" 10 5) 5)))]
+      (try
+        (if (:error ret)
+          (extensions/execute-hook! project :on-build-failed {})
+          (extensions/execute-hook! project :on-build-successful {}))
+        (catch Exception _))
+      ret)))
