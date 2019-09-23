@@ -29,11 +29,7 @@
 
 (defn build-project!
   [project node evaluation-context extra-build-targets old-artifact-map render-progress!]
-  (if-let [extension-error (try
-                             (extensions/execute-hook! project :on-build-started {})
-                             nil
-                             (catch Exception e
-                               (extensions/Exception->error project e)))]
+  (if-let [extension-error (extensions/execute-hook! project :on-build-started {:exceptions-as-errors true})]
     {:error extension-error}
     (let [steps (atom [])
           collect-tracer (make-collect-progress-steps-tracer :build-targets steps)

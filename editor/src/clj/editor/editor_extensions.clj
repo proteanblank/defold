@@ -180,18 +180,21 @@
           (str "needs at least " (second pred) " element" (when (< 1 (second pred)) "s"))))
       (pr-str pred)))
 
+(defn- spec-problems->string [problems]
+  (->> problems
+       (map #(str (->lua-string (:val %)) " " (spec-pred->reason (s/abbrev (:pred %)))))
+       (string/join "\n")))
+
+(defn- error-message [label path ^Throwable ex]
+  (str label
+       (when path (str " in " path))
+       " failed:\n"
+       (if-let [problems (::s/problems (ex-data ex))]
+         (spec-problems->string problems)
+         (.getMessage ex))))
+
 (defn- handle-extension-error [options ^Exception ex]
-  (let [message (str (:label options "Extension")
-                     (when-let [path (:path options)]
-                       (str " in " path))
-                     " failed: \n"
-                     (if-let [problems (::s/problems (ex-data ex))]
-                       (do
-                         (clojure.pprint/pprint problems)
-                         (string/join "\n" (->> problems
-                                                (map #(str (->lua-string (:val %)) " "
-                                                           (spec-pred->reason (s/abbrev (:pred %))))))))
-                       (.getMessage ex)))
+  (let [message (error-message (:label options "Extension") (:path options) ex)
         default (:default options ::re-throw)]
     (display-output! (:ui options) :err message)
     (if (= ::re-throw default)
@@ -350,19 +353,49 @@
                                         actions)]
       (executor inputs execution-context))))
 
+(defn- hook-exception->error [^Throwable ex project label]
+  (let [^Throwable root (stacktrace/root-cause ex)
+        message (ex-message root)
+        [_ file line :as match] (re-find console/line-sub-regions-pattern message)]
+    (g/map->error
+      (cond-> {:_node-id (or (when match (project/get-resource-node project file))
+                             (project/get-resource-node project hooks-file-path))
+               :message (error-message label hooks-file-path root)
+               :severity :fatal}
+
+              line
+              (assoc-in [:user-data :cursor-range]
+                        (data/line-number->CursorRange (Integer/parseInt line)))))))
+
 (defn execute-hook!
-  "Execute hook defined in this `project`, may throw exception"
-  [project hook-keyword opts]
+  "Execute hook defined in this `project`, may throw exception, returns nil
+
+  Available options:
+  - `:opts` (optional) - map that will be serialized to lua table and passed to
+    lua function hook
+  - `:exceptions-as-errors` (optional, default false) - flag indicating whether
+    this function should return error value instead of throwing exception"
+  [project hook-keyword options]
   (when-let [state (ext-state project)]
-    @(execute-with! project {:state state :report-exceptions false}
-       (fn [ext-map]
-         (try-with-extension-exceptions {:label (str "hook " (->lua-string hook-keyword))
-                                         :path hooks-file-path
-                                         :ui (:ui state)}
-           (some-> (get-in ext-map [:hooks hook-keyword])
-                   (as-> lua-fn
-                         (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts))))
-                   (perform-actions! *execution-context*)))))))
+    (let [opts (:opts options ::no-opts)
+          ex-label (str "hook " (->lua-string hook-keyword))]
+      (try
+        @(execute-with! project {:state state :report-exceptions false}
+           (fn [ext-map]
+             (try-with-extension-exceptions {:label ex-label
+                                             :path hooks-file-path
+                                             :ui (:ui state)}
+               (some-> (get-in ext-map [:hooks hook-keyword])
+                       (as-> lua-fn
+                             (if (= opts ::no-opts)
+                               (luart/lua->clj (luart/invoke lua-fn))
+                               (luart/lua->clj (luart/invoke lua-fn (luart/clj->lua opts)))))
+                       (perform-actions! *execution-context*)))))
+        nil
+        (catch Exception e
+          (if (:exceptions-as-errors options)
+            (hook-exception->error e project ex-label)
+            (throw e)))))))
 
 (defn- continue [acc env lua-fn f & args]
   (let [new-lua-fn (fn [env m]
@@ -502,19 +535,3 @@
                              (g/node-value extensions :project-prototypes ec)))
               (re-create-ext-agent env))))))
   (reload-commands! project))
-
-(defn Exception->error
-  "Convert exception thrown by extension hook to graph error value"
-  [project ^Throwable ex]
-  (let [^Throwable root (stacktrace/root-cause ex)
-        message (ex-message root)
-        [_ file line :as match] (re-find console/line-sub-regions-pattern message)]
-    (g/map->error
-      (cond-> {:_node-id (or (when match (project/get-resource-node project file))
-                             (project/get-resource-node project hooks-file-path))
-               :message message
-               :severity :fatal}
-
-              line
-              (assoc-in [:user-data :cursor-range]
-                        (data/line-number->CursorRange (Integer/parseInt line)))))))
