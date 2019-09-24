@@ -1,6 +1,7 @@
 (ns editor.luart
   (:refer-clojure :exclude [read eval])
-  (:require [clojure.string :as string])
+  (:require [clojure.string :as string]
+            [clojure.java.io :as io])
   (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
@@ -8,7 +9,8 @@
            [java.io PrintStream ByteArrayInputStream File]
            [org.apache.commons.io.output WriterOutputStream]
            [org.luaj.vm2.compiler LuaC]
-           [java.nio.charset Charset]))
+           [java.nio.charset Charset]
+           [java.nio.file LinkOption]))
 
 (set! *warn-on-reflection* true)
 
@@ -128,7 +130,7 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [resource-path->input-stream extra-globals display-output!]
+  ^Globals [resource-path->input-stream can-open-file? extra-globals display-output!]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
@@ -140,8 +142,12 @@
     (.load (StringLib.))
     (.load (CoroutineLib.))
     (.load (JseMathLib.))
-    (.load (JseIoLib.)) ;; TODO decide what to do
-    #_(.load (JseOsLib.)) ;; TODO decide what to do
+    (.load (proxy [JseIoLib] []
+             (openFile [filename readMode appendMode updateMode binaryMode]
+               (let [^JseIoLib this this]
+                 (if (can-open-file? filename)
+                   (proxy-super openFile filename readMode appendMode updateMode binaryMode)
+                   (throw (ex-info (str "Can't open file " filename) {:filename filename})))))))
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(display-output! :out %))))

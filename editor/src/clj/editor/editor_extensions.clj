@@ -12,9 +12,11 @@
             [editor.defold-project :as project]
             [editor.error-reporting :as error-reporting]
             [editor.util :as util]
-            [editor.console :as console])
+            [editor.console :as console]
+            [editor.workspace :as workspace])
   (:import [org.luaj.vm2 LuaFunction Prototype LuaValue LuaError]
-           [clojure.lang MultiFn]))
+           [clojure.lang MultiFn]
+           [com.defold.editor Platform]))
 
 (set! *warn-on-reflection* true)
 
@@ -510,6 +512,10 @@
             :when dynamic-handler]
         dynamic-handler))))
 
+(def ^:private platform
+  (let [os (.getOs (Platform/getHostPlatform))]
+    ({"darwin" "macos", "win32" "windows"} os os)))
+
 (defn reload [project kind ui]
   (g/with-auto-evaluation-context ec
     (g/user-data-swap!
@@ -517,11 +523,22 @@
       :state
       (fn [state]
         (let [extensions (g/node-value project :editor-extensions ec)
+              project-path (-> project
+                               (project/workspace ec)
+                               (workspace/project-path ec)
+                               .toPath
+                               .normalize)
               env (luart/make-env (fn [path]
                                     (some-> (project/get-resource-node project path ec)
                                             (g/node-value :lines ec)
                                             (data/lines-input-stream)))
-                                  {"editor" {"get" do-ext-get}}
+                                  (fn [^String filename]
+                                    (-> project-path
+                                        (.resolve filename)
+                                        .normalize
+                                        (.startsWith project-path)))
+                                  {"editor" {"get" do-ext-get
+                                             "platform" platform}}
                                   #(display-output! ui %1 %2))]
           (-> state
               (assoc :ui ui)
