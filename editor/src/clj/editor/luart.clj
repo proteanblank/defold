@@ -1,16 +1,15 @@
 (ns editor.luart
   (:refer-clojure :exclude [read eval])
-  (:require [clojure.string :as string]
-            [clojure.java.io :as io])
+  (:require [clojure.string :as string])
   (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
-           [org.luaj.vm2.lib.jse JseBaseLib JseMathLib JseIoLib]
+           [org.luaj.vm2.lib.jse JseBaseLib JseMathLib]
            [java.io PrintStream ByteArrayInputStream File]
            [org.apache.commons.io.output WriterOutputStream]
            [org.luaj.vm2.compiler LuaC]
            [java.nio.charset Charset]
-           [java.nio.file LinkOption]))
+           [com.defold.editor.luart IoLib]))
 
 (set! *warn-on-reflection* true)
 
@@ -142,9 +141,9 @@
     (.load (StringLib.))
     (.load (CoroutineLib.))
     (.load (JseMathLib.))
-    (.load (proxy [JseIoLib] []
+    (.load (proxy [IoLib] []
              (openFile [filename readMode appendMode updateMode binaryMode]
-               (let [^JseIoLib this this]
+               (let [^IoLib this this]
                  (if (can-open-file? filename)
                    (proxy-super openFile filename readMode appendMode updateMode binaryMode)
                    (throw (ex-info (str "Can't open file " filename) {:filename filename})))))))
