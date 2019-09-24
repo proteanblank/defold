@@ -180,17 +180,14 @@
           (str "needs at least " (second pred) " element" (when (< 1 (second pred)) "s"))))
       (pr-str pred)))
 
-(defn- spec-problems->string [problems]
-  (->> problems
-       (map #(str (->lua-string (:val %)) " " (spec-pred->reason (s/abbrev (:pred %)))))
-       (string/join "\n")))
-
 (defn- error-message [label path ^Throwable ex]
   (str label
        (when path (str " in " path))
        " failed:\n"
        (if-let [problems (::s/problems (ex-data ex))]
-         (spec-problems->string problems)
+         (->> problems
+              (map #(str (->lua-string (:val %)) " " (spec-pred->reason (s/abbrev (:pred %)))))
+              (string/join "\n"))
          (.getMessage ex))))
 
 (defn- handle-extension-error [options ^Exception ex]
@@ -372,7 +369,9 @@
 
   Available options:
   - `:opts` (optional) - map that will be serialized to lua table and passed to
-    lua function hook
+    lua function hook. **WARNING** all node ids should be wrapped with `reduced`
+    so they are passed as userdata to lua, since Lua's doubles and integers lack
+    necessary precision
   - `:exceptions-as-errors` (optional, default false) - flag indicating whether
     this function should return error value instead of throwing exception"
   [project hook-keyword options]
