@@ -533,10 +533,16 @@
                                             (g/node-value :lines ec)
                                             (data/lines-input-stream)))
                                   (fn [^String filename]
-                                    (-> project-path
-                                        (.resolve filename)
-                                        .normalize
-                                        (.startsWith project-path)))
+                                    (let [normalized-path (-> project-path
+                                                              (.resolve filename)
+                                                              .normalize)]
+                                      (if (.startsWith normalized-path project-path)
+                                        (.toString normalized-path)
+                                        (throw (ex-info (str "Can't open "
+                                                             filename
+                                                             ": outside of project directory")
+                                                        {:filename filename
+                                                         :project-path project-path})))))
                                   {"editor" {"get" do-ext-get
                                              "platform" platform}}
                                   #(display-output! ui %1 %2))]

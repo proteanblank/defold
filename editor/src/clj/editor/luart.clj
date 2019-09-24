@@ -129,7 +129,7 @@
       "UTF-8")))
 
 (defn make-env
-  ^Globals [resource-path->input-stream can-open-file? extra-globals display-output!]
+  ^Globals [resource-path->input-stream validate-opened-filename extra-globals display-output!]
   (doto (Globals.)
     (.load (proxy [JseBaseLib] []
              (findResource [filename]
@@ -144,9 +144,12 @@
     (.load (proxy [IoLib] []
              (openFile [filename readMode appendMode updateMode binaryMode]
                (let [^IoLib this this]
-                 (if (can-open-file? filename)
-                   (proxy-super openFile filename readMode appendMode updateMode binaryMode)
-                   (throw (ex-info (str "Can't open file " filename) {:filename filename})))))))
+                 (proxy-super openFile
+                              (validate-opened-filename filename)
+                              readMode
+                              appendMode
+                              updateMode
+                              binaryMode)))))
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(display-output! :out %))))
