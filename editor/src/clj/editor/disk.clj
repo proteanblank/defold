@@ -161,10 +161,12 @@
 
 (defn async-bob-build! [render-reload-progress! render-save-progress! render-build-progress! task-cancelled? render-build-error! bob-commands bob-args project changes-view callback!]
   (future
-    (if-let [extension-error (extensions/execute-hook! project :on-bundle-started {:exceptions-as-errors true})]
-      (ui/run-later
-        (handle-bob-error! render-build-error! project (g/make-evaluation-context) {:error extension-error})
-        (when (some? callback!) (callback! false)))
+    (if-let [extension-error (extensions/execute-hook! project :on-bundle-started {:exception-policy :as-error})]
+      (do
+        (extensions/execute-hook! project :on-bundle-failed {:exception-policy :ignore})
+        (ui/run-later
+          (handle-bob-error! render-build-error! project (g/make-evaluation-context) {:error extension-error})
+          (when (some? callback!) (callback! false))))
       (try
         (disk-availability/push-busy!)
         ;; We need to save because bob reads from FS.
@@ -188,12 +190,12 @@
                              (future
                                (try
                                  (let [result (bob/bob-build! project evaluation-context bob-commands bob-args render-build-progress! task-cancelled?)]
-                                   (try
-                                     (if (or (:error result)
-                                             (:exception result))
-                                       (extensions/execute-hook! project :on-bundle-failed {})
-                                       (extensions/execute-hook! project :on-bundle-successful {}))
-                                     (catch Exception _))
+                                   (extensions/execute-hook! project
+                                                             (if (or (:error result)
+                                                                     (:exception result))
+                                                               :on-bundle-failed
+                                                               :on-bundle-successful)
+                                                             {:exception-policy :ignore})
                                    (render-build-progress! progress/done)
                                    (ui/run-later
                                      (try

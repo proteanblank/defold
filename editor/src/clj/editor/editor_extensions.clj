@@ -367,15 +367,18 @@
                         (data/line-number->CursorRange (Integer/parseInt line)))))))
 
 (defn execute-hook!
-  "Execute hook defined in this `project`, may throw exception, returns nil
+  "Execute hook defined in this `project`, may throw, returns nil by default
 
   Available options:
   - `:opts` (optional) - map that will be serialized to lua table and passed to
     lua function hook. **WARNING** all node ids should be wrapped with `reduced`
     so they are passed as userdata to lua, since Lua's doubles and integers lack
     necessary precision
-  - `:exceptions-as-errors` (optional, default false) - flag indicating whether
-    this function should return error value instead of throwing exception"
+  - `:exception-policy` (optional) - keyword indicating how this function should
+    behave when exception is thrown because of an extension code. Can be:
+    - `:as-error` - transform exception to error value suitable for graph
+    - `:ignore` - return nil
+    when no `exception-policy` is provided, will re-throw exception"
   [project hook-keyword options]
   (when-let [state (ext-state project)]
     (let [opts (:opts options ::no-opts)
@@ -394,8 +397,9 @@
                        (perform-actions! *execution-context*)))))
         nil
         (catch Exception e
-          (if (:exceptions-as-errors options)
-            (hook-exception->error e project ex-label)
+          (case (:exception-policy options)
+            :as-error (hook-exception->error e project ex-label)
+            :ignore nil
             (throw e)))))))
 
 (defn- continue [acc env lua-fn f & args]
