@@ -100,7 +100,12 @@
       (g/user-data :state)))
 
 (def ^:private ^:dynamic *execution-context*
-  "A map with `:project-id` and `:evaluation-context`"
+  "A map with following keys:
+   - `:project-id`
+   - `:evaluation-context`
+   - `:ui` - instance of UI protocol
+   - `:request-sync` - volatile with boolean indicating whether extension
+     implicitly asked to perform resource sync, for example by writing to file"
   nil)
 
 (defn- execute-with!
@@ -123,7 +128,8 @@
              (let [evaluation-context (or (:evaluation-context options) (g/make-evaluation-context))]
                (binding [*execution-context* {:project project
                                               :evaluation-context evaluation-context
-                                              :ui (:ui state)}]
+                                              :ui (:ui state)
+                                              :request-sync (volatile! false)}]
                  (result-promise (try
                                    [nil (f ext-map)]
                                    (catch Exception e
@@ -131,7 +137,9 @@
                                        (error-reporting/report-exception! e))
                                      [e nil])))
                  (when-not (contains? options :evaluation-context)
-                   (g/update-cache-from-evaluation-context! evaluation-context))))
+                   (g/update-cache-from-evaluation-context! evaluation-context))
+                 (when @(:request-sync *execution-context*)
+                   (reload-resources! (:ui state)))))
              ext-map))
      (future (let [[err ret] @result-promise]
                (if err
@@ -536,7 +544,9 @@
                                     (some-> (project/get-resource-node project path ec)
                                             (g/node-value :lines ec)
                                             (data/lines-input-stream)))
-                                  (fn [^String filename]
+                                  (fn [^String filename read-mode]
+                                    (when-not read-mode
+                                      (vreset! (:request-sync *execution-context*) true))
                                     (let [normalized-path (-> project-path
                                                               (.resolve filename)
                                                               .normalize)]

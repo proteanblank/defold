@@ -161,57 +161,63 @@
 
 (defn async-bob-build! [render-reload-progress! render-save-progress! render-build-progress! task-cancelled? render-build-error! bob-commands bob-args project changes-view callback!]
   (future
-    (if-let [extension-error (extensions/execute-hook! project :on-bundle-started {:exception-policy :as-error})]
-      (do
-        (extensions/execute-hook! project :on-bundle-failed {:exception-policy :ignore})
-        (ui/run-later
-          (handle-bob-error! render-build-error! project (g/make-evaluation-context) {:error extension-error})
-          (when (some? callback!) (callback! false))))
-      (try
-        (disk-availability/push-busy!)
-        ;; We need to save because bob reads from FS.
-        (async-save! render-reload-progress! render-save-progress! project changes-view
-                     (fn [successful?]
-                       (if-not successful?
-                         (try
-                           (when (some? callback!)
-                             (callback! false))
-                           (finally
-                             (disk-availability/pop-busy!)))
-                         (try
-                           (render-build-progress! (progress/make-cancellable-indeterminate "Building..."))
-                           ;; evaluation-context below is used to map
-                           ;; project paths to resource node id:s. To be
-                           ;; strictly correct, we should probably re-use
-                           ;; the ec created when saving - so the graph
-                           ;; state in the ec corresponds with the state
-                           ;; bob sees on disk.
-                           (let [evaluation-context (g/make-evaluation-context)]
-                             (future
-                               (try
-                                 (let [result (bob/bob-build! project evaluation-context bob-commands bob-args render-build-progress! task-cancelled?)]
-                                   (extensions/execute-hook! project
-                                                             (if (or (:error result)
-                                                                     (:exception result))
-                                                               :on-bundle-failed
-                                                               :on-bundle-successful)
-                                                             {:exception-policy :ignore})
-                                   (render-build-progress! progress/done)
-                                   (ui/run-later
-                                     (try
-                                       (let [successful? (not (handle-bob-error! render-build-error! project evaluation-context result))]
-                                         (when (some? callback!)
-                                           (callback! successful?)))
-                                       (finally
-                                         (disk-availability/pop-busy!)
-                                         (g/update-cache-from-evaluation-context! evaluation-context)))))
-                                 (catch Throwable error
-                                   (disk-availability/pop-busy!)
-                                   (render-build-progress! progress/done)
-                                   (error-reporting/report-exception! error)))))
-                           (catch Throwable error
-                             (disk-availability/pop-busy!)
-                             (throw error))))))
-        (catch Throwable error
-          (disk-availability/pop-busy!)
-          (throw error))))))
+    (let [hook-opts {:output-directory (get bob-args "bundle-output")
+                     :platform (get bob-args "platform")}]
+      (if-let [extension-error (extensions/execute-hook! project :on-bundle-started
+                                                         {:exception-policy :as-error
+                                                          :opts hook-opts})]
+        (do
+          (extensions/execute-hook! project :on-bundle-failed {:exception-policy :ignore
+                                                               :opts hook-opts})
+          (ui/run-later
+            (handle-bob-error! render-build-error! project (g/make-evaluation-context) {:error extension-error})
+            (when (some? callback!) (callback! false))))
+        (try
+          (disk-availability/push-busy!)
+          ;; We need to save because bob reads from FS.
+          (async-save! render-reload-progress! render-save-progress! project changes-view
+                       (fn [successful?]
+                         (if-not successful?
+                           (try
+                             (when (some? callback!)
+                               (callback! false))
+                             (finally
+                               (disk-availability/pop-busy!)))
+                           (try
+                             (render-build-progress! (progress/make-cancellable-indeterminate "Building..."))
+                             ;; evaluation-context below is used to map
+                             ;; project paths to resource node id:s. To be
+                             ;; strictly correct, we should probably re-use
+                             ;; the ec created when saving - so the graph
+                             ;; state in the ec corresponds with the state
+                             ;; bob sees on disk.
+                             (let [evaluation-context (g/make-evaluation-context)]
+                               (future
+                                 (try
+                                   (let [result (bob/bob-build! project evaluation-context bob-commands bob-args render-build-progress! task-cancelled?)]
+                                     (extensions/execute-hook! project
+                                                               (if (or (:error result)
+                                                                       (:exception result))
+                                                                 :on-bundle-failed
+                                                                 :on-bundle-successful)
+                                                               {:exception-policy :ignore
+                                                                :opts hook-opts})
+                                     (render-build-progress! progress/done)
+                                     (ui/run-later
+                                       (try
+                                         (let [successful? (not (handle-bob-error! render-build-error! project evaluation-context result))]
+                                           (when (some? callback!)
+                                             (callback! successful?)))
+                                         (finally
+                                           (disk-availability/pop-busy!)
+                                           (g/update-cache-from-evaluation-context! evaluation-context)))))
+                                   (catch Throwable error
+                                     (disk-availability/pop-busy!)
+                                     (render-build-progress! progress/done)
+                                     (error-reporting/report-exception! error)))))
+                             (catch Throwable error
+                               (disk-availability/pop-busy!)
+                               (throw error))))))
+          (catch Throwable error
+            (disk-availability/pop-busy!)
+            (throw error)))))))

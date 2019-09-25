@@ -4,7 +4,7 @@
   (:import [org.luaj.vm2 LuaNil LuaValue LuaInteger LuaDouble LuaBoolean LuaString LuaTable Varargs LuaValue$None LuaFunction Globals LoadState LuaClosure Prototype LuaUserdata]
            [clojure.lang IPersistentVector IPersistentMap Keyword Fn]
            [org.luaj.vm2.lib VarArgFunction PackageLib Bit32Lib TableLib StringLib CoroutineLib]
-           [org.luaj.vm2.lib.jse JseBaseLib JseMathLib]
+           [org.luaj.vm2.lib.jse JseBaseLib JseMathLib JseOsLib]
            [java.io PrintStream ByteArrayInputStream File]
            [org.apache.commons.io.output WriterOutputStream]
            [org.luaj.vm2.compiler LuaC]
@@ -145,11 +145,19 @@
              (openFile [filename readMode appendMode updateMode binaryMode]
                (let [^IoLib this this]
                  (proxy-super openFile
-                              (validate-opened-filename filename)
+                              (validate-opened-filename filename readMode)
                               readMode
                               appendMode
                               updateMode
                               binaryMode)))))
+    (-> (.get "io") (.set "tmpfile" LuaValue/NIL))
+    (.load (JseOsLib.))
+    (-> (.get "os") (doto
+                      (.set "execute" LuaValue/NIL)
+                      (.set "exit" LuaValue/NIL)
+                      (.set "remove" LuaValue/NIL)
+                      (.set "setlocale" LuaValue/NIL)
+                      (.set "tmpname" LuaValue/NIL)))
     (LoadState/install)
     (LuaC/install)
     (-> (.-STDOUT) (set! (line-print-stream #(display-output! :out %))))
