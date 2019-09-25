@@ -156,6 +156,7 @@
                       (.set "execute" LuaValue/NIL)
                       (.set "exit" LuaValue/NIL)
                       (.set "remove" LuaValue/NIL)
+                      (.set "rename" LuaValue/NIL)
                       (.set "setlocale" LuaValue/NIL)
                       (.set "tmpname" LuaValue/NIL)))
     (LoadState/install)
