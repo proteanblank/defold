@@ -1,4 +1,4 @@
-# Defold Editor
+# Defold Editor sanity check
 
 ## Requirements
 * [Java 11](https://jdk.java.net/11/)
