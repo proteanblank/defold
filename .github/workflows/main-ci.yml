@@ -16,7 +16,7 @@ jobs:
       { name: 'Checkout', uses: actions/checkout@v1, with: { fetch-depth: 3 } },
       {
         name: 'Build engine',
-        uses: '${GITHUB_WORKSPACE}/ci/action.yml',
+        uses: ./ci/action.yml,
         with: { command: "install" }
       }
     ]
