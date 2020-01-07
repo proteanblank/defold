@@ -22,8 +22,4 @@ RUN apt-get install -y --no-install-recommends silversearcher-ag
 RUN apt-get install -y --no-install-recommends valgrind
 RUN apt-get install -y --no-install-recommends lib32z1
 
-ENV workdir .
-
-WORKDIR ${workdir}
-
-ENTRYPOINT ${workdir}/ci/ci.sh
+ENTRYPOINT ./ci/ci.sh

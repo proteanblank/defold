@@ -8,9 +8,5 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  env: {
-    foo: "bar",
-    workdir: '${GITHUB_WORKSPACE}'
-  }
   args:
     - ${{ inputs.command }}
