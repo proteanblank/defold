@@ -21,3 +21,18 @@ jobs:
         with: { args: "./ci/ci.sh --platform=${{ matrix.platform }} --branch=$GITHUB_REF --archive --skip-tests --skip-builtins --skip-docs engine" }
       }
     ]
+
+  build-engine-android:
+    strategy:
+      matrix:
+        platform: [armv7-android]
+    runs-on: ubuntu-18.04
+    steps: [
+      { name: 'Checkout', uses: actions/checkout@v1, with: { fetch-depth: 3 } },
+      {
+        name: 'Build engine',
+        uses: ./ci,
+        env: { S3_ACCESS_KEY: '${{ secrets.S3_ACCESS_KEY }}', S3_SECRET_KEY: '${{ secrets.S3_SECRET_KEY }}' },
+        with: { args: "./ci/ci.sh --platform=${{ matrix.platform }} --branch=$GITHUB_REF --archive --skip-tests --skip-builtins --skip-docs engine" }
+      }
+    ]
