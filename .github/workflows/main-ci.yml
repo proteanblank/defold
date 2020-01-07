@@ -19,3 +19,4 @@ jobs:
         uses: ./ci/action.yml,
         with: { command: "install" }
       }
+    ]
