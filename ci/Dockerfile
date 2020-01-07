@@ -1,8 +1,9 @@
 FROM ubuntu:18.04
 
-# Basic dependencies
 RUN apt-get update
 RUN apt-get install -y software-properties-common
+
+# Basic dependencies
 RUN \
   apt-get install -y --no-install-recommends \
     gcc-5 \
@@ -24,6 +25,13 @@ RUN \
     silversearcher-ag \
     valgrind \
     lib32z1
+
+# Install Java
+RUN \
+  add-apt-repository ppa:openjdk-r/ppa && \
+  apt-get update && \
+  apt-get install -y --no-install-recommends openjdk-11-jdk && \
+  apt install -y openjdk-8-jdk
 
 # Install python and easy_install
 RUN \
