@@ -24,7 +24,8 @@ RUN \
     tree \
     silversearcher-ag \
     valgrind \
-    lib32z1
+    lib32z1 \
+    git
 
 # Install Java
 RUN \
