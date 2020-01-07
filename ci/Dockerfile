@@ -24,5 +24,4 @@ RUN apt-get install -y --no-install-recommends lib32z1
 
 RUN apt-get install -y --no-install-recommends python-setuptools
 
-ENTRYPOINT ["./ci/ci.sh"]
-CMD []
+ENTRYPOINT "./ci/ci.sh"

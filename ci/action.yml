@@ -1,12 +1,6 @@
 # action.yml
 name: 'CI'
 description: 'Run CI step'
-inputs:
-  command:
-    description: "The command to run on the CI system"
-    required: true
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  args:
-    - ${{ inputs.command }}
