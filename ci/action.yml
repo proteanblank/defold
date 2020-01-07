@@ -7,7 +7,7 @@ inputs:
     required: true
 runs:
   using: 'docker'
-  image: './ci/Dockerfile'
+  image: '${GITHUB_WORKSPACE}/ci/Dockerfile'
   env: {
     foo: "bar",
     workdir: ${GITHUB_WORKSPACE}
