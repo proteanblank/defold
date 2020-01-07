@@ -17,6 +17,7 @@ jobs:
       {
         name: 'Build engine',
         uses: ./ci,
-        with: { command: "install" }
+        env: { S3_ACCESS_KEY: '${{ secrets.S3_ACCESS_KEY }}', S3_SECRET_KEY: '${{ secrets.S3_SECRET_KEY }}' },
+        with: { command: "--platform=${{ matrix.platform }} --branch=$GITHUB_REF --archive --skip-tests --skip-builtins --skip-docs engine'" }
       }
     ]
