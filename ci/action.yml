@@ -10,7 +10,7 @@ runs:
   image: '${GITHUB_WORKSPACE}/ci/Dockerfile'
   env: {
     foo: "bar",
-    workdir: ${GITHUB_WORKSPACE}
+    workdir: '${GITHUB_WORKSPACE}'
   }
   args:
     - ${{ inputs.command }}
