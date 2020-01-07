@@ -10,7 +10,7 @@ jobs:
   build-engine-web:
     strategy:
       matrix:
-        platform: [js-web, wasm-web]
+        platform: [js-web]
     runs-on: ubuntu-18.04
     steps: [
       { name: 'Checkout', uses: actions/checkout@v1, with: { fetch-depth: 3 } },
