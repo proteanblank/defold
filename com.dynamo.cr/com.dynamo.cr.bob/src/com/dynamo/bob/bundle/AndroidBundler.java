@@ -304,6 +304,11 @@ public class AndroidBundler implements IBundler {
                 ZipEntry inE = entries.nextElement();
 
                 ZipEntry ze = new ZipEntry(inE.getName());
+
+                if (inE.getSize() >= (int)0xFFFFFFFF) {
+                    logger.log(Level.Warning, String.format("Zip entry '%s' is very large: %d\nOperation will most likely fail", inE.getName(), inE.getSize()));
+                }
+
                 ze.setSize(inE.getSize());
                 byte[] entryData = null;
                 CRC32 crc = null;
