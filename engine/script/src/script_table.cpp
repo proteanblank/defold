@@ -27,6 +27,53 @@ typedef uint16_t uint16_t_1_align;
 typedef uint32_t uint32_t_1_align;
 #endif
 
+#include <ctype.h>
+
+#if defined(DM_DEBUG_SCRIPT_TABLE)
+    struct ScriptTableDebugVars
+    {
+        int m_Level;
+    } g_ScriptTableDebugVars;
+    static void ScriptTableDebug_Start();
+    static void ScriptTableDebug_Indent();
+    static void ScriptTableDebug_Unindent();
+
+    static void ScriptTableDebug_StartTable();
+    static void ScriptTableDebug_EndTable();
+    static void ScriptTableDebug_StartKey();
+    static void ScriptTableDebug_EndKey();
+    static void ScriptTableDebug_StartValue();
+    static void ScriptTableDebug_EndValue();
+    static void ScriptTableDebug_PrintString(const char* s);
+    static void ScriptTableDebug_PrintString(const char* s, int len);
+    static void ScriptTableDebug_PrintBool(bool n);
+    static void ScriptTableDebug_PrintNumber(double n);
+    static void ScriptTableDebug_PrintHash(dmhash_t n);
+    static void ScriptTableDebug_PrintMatrix4(float* f);
+    static void ScriptTableDebug_PrintVector3(float x, float y, float z);
+    static void ScriptTableDebug_PrintVector4(float x, float y, float z, float w);
+    static void ScriptTableDebug_PrintQuat(float x, float y, float z, float w);
+    static void ScriptTableDebug_PrintUrl(dmMessage::URL* url);
+#else
+    static void ScriptTableDebug_Start() {}
+    static void ScriptTableDebug_StartTable() {}
+    static void ScriptTableDebug_EndTable() {}
+    static void ScriptTableDebug_StartKey() {}
+    static void ScriptTableDebug_EndKey() {}
+    static void ScriptTableDebug_StartValue() {}
+    static void ScriptTableDebug_EndValue() {}
+    static void ScriptTableDebug_PrintString(const char* s) {}
+    static void ScriptTableDebug_PrintString(const char* s, int len) {}
+    static void ScriptTableDebug_PrintBool(bool n) {}
+    static void ScriptTableDebug_PrintNumber(double n) {}
+    static void ScriptTableDebug_PrintHash(dmhash_t n) {}
+    static void ScriptTableDebug_PrintMatrix4(float* f) {}
+    static void ScriptTableDebug_PrintVector3(float x, float y, float z) {}
+    static void ScriptTableDebug_PrintVector4(float x, float y, float z, float w) {}
+    static void ScriptTableDebug_PrintQuat(float x, float y, float z, float w) {}
+    static void ScriptTableDebug_PrintUrl(dmMessage::URL* url) {}
+#endif
+
 // custom type when writing negative numbers as keys
 // the rest of the types used when serializing a table come from lua.h
 // make sure this type has a value quite a bit higher than the types in lua.h
@@ -250,9 +297,47 @@ namespace dmScript
             luaL_error(L, "Reading outside of buffer at element #%d (string): wanted to read: %d bytes left: %d [BufStart: %p, BufSize: %lu]\n'%s'", count, total_size, (int)(buffer_end - buffer), logger.m_BufferStart, logger.m_BufferSize, log_str);
         }
 
+        ScriptTableDebug_PrintString(buffer);
         lua_pushstring(L, buffer);
         return total_size;
     }
+
+#if defined(DM_DEBUG_SCRIPT_TABLE)
+    static void DumpMemory(uint8_t* p, uint32_t size)
+    {
+        printf("p: %p\n", p);
+        const uint64_t align = 16;
+        uint8_t* pstart = (uint8_t*)((uintptr_t)p & ~(align-1));
+        uint8_t* pend = (uint8_t*)((uintptr_t)(p+size) & ~(align-1));
+        if (pend < p)
+            pend += align;
+
+        uint8_t* vp = pstart;
+        while (vp < pend)
+        {
+            printf("%p\t", vp);
+            for (int j = 0; j < 2; ++j)
+            {
+                for (int i = 0; i < align; ++i)
+                {
+                    uint8_t value = vp[i];
+
+                    if (j == 1 && isprint(value))
+                        printf("%2c ", value);
+                    else
+                        printf("%02x ", value);
+                }
+                printf("\t");
+            }
+            printf("\n");
+
+            vp += align;
+        }
+        fflush(stdout);
+    }
+#else
+    static void DumpMemory(uint8_t* p, uint32_t size) {}
+#endif
 
     // When loading/unpacking messages/save games, we use pascal strings, and the Lua binary string api
     static uint32_t LoadTSTRING(lua_State* L, const char* buffer, const char* buffer_end, uint32_t count, PushTableLogger& logger)
@@ -262,6 +347,14 @@ namespace dmScript
         uint32_t total_size = value_len + sizeof(uint32_t);
         if (buffer_end - buffer < (intptr_t)total_size)
         {
+            uint32_t dump_size = value_len + 32;
+            if (dump_size > 256)
+                dump_size = 256;
+
+            printf("u32ptr: %p  %08x\n", u32ptr, *u32ptr);
+            fflush(stdout);
+            DumpMemory((uint8_t*)buffer, dump_size);
+
             char log_str[PUSH_TABLE_LOGGER_STR_SIZE];
             PushTableLogPrint(logger, log_str);
             char str[512];
@@ -269,6 +362,7 @@ namespace dmScript
             luaL_error(L, "%s", str);
         }
 
+        ScriptTableDebug_PrintString(buffer + sizeof(uint32_t), value_len);
         lua_pushlstring(L, buffer + sizeof(uint32_t), value_len);
         return total_size;
     }
@@ -528,6 +622,8 @@ namespace dmScript
 
     uint32_t CheckTable(lua_State* L, char* buffer, uint32_t buffer_size, int index)
     {
+        ScriptTableDebug_Start();
+
         if (buffer_size > sizeof(TableHeader)) {
             char* original_buffer = buffer;
 
@@ -675,6 +771,7 @@ namespace dmScript
         uint32_t count = *(uint16_t_1_align *)buffer;
         buffer += 2;
 
+        ScriptTableDebug_StartTable();
         PushTableLogFormat(logger, "{%d|", count);
 
         if (buffer > buffer_end) {
@@ -693,6 +790,10 @@ namespace dmScript
 
             char key_type = (*buffer++);
             char value_type = (*buffer++);
+
+            printf("%p key_type: %x  value_type: %x\n", buffer-2, (uint32_t)key_type, (uint32_t)value_type);
+
+            ScriptTableDebug_StartKey();
 
             if (key_type == LUA_TSTRING)
             {
@@ -713,12 +814,16 @@ namespace dmScript
                 CHECK_PUSHTABLE_OOB("key number", logger, buffer, buffer_end, count, depth);
             }
 
+            ScriptTableDebug_EndKey();
+            ScriptTableDebug_StartValue();
+
             switch (value_type)
             {
                 case LUA_TBOOLEAN:
                 {
                     PushTableLogString(logger, "VB");
 
+                    ScriptTableDebug_PrintBool(*buffer);
                     lua_pushboolean(L, *buffer++);
                     CHECK_PUSHTABLE_OOB("value bool", logger, buffer, buffer_end, count, depth);
                 }
@@ -736,6 +841,7 @@ namespace dmScript
                     // Sanity-check. At least 4 bytes alignment (de facto)
                     assert((((intptr_t) buffer) & 3) == 0);
 
+                    ScriptTableDebug_PrintNumber(*((lua_Number_4_align *) buffer));
                     lua_pushnumber(L, *((lua_Number_4_align *) buffer));
                     buffer += sizeof(lua_Number);
 
@@ -777,6 +883,7 @@ namespace dmScript
                         PushTableLogString(logger, "V3");
 
                         float* f = (float*) buffer;
+                        ScriptTableDebug_PrintVector3(f[0], f[1], f[2]);
                         dmScript::PushVector3(L, Vectormath::Aos::Vector3(f[0], f[1], f[2]));
                         buffer += sizeof(float) * 3;
                         CHECK_PUSHTABLE_OOB("udata vec3", logger, buffer, buffer_end, count, depth);
@@ -786,6 +893,7 @@ namespace dmScript
                         PushTableLogString(logger, "V4");
 
                         float* f = (float*) buffer;
+                        ScriptTableDebug_PrintVector4(f[0], f[1], f[2], f[3]);
                         dmScript::PushVector4(L, Vectormath::Aos::Vector4(f[0], f[1], f[2], f[3]));
                         buffer += sizeof(float) * 4;
                         CHECK_PUSHTABLE_OOB("udata vec4", logger, buffer, buffer_end, count, depth);
@@ -795,6 +903,7 @@ namespace dmScript
                         PushTableLogString(logger, "Q4");
 
                         float* f = (float*) buffer;
+                        ScriptTableDebug_PrintQuat(f[0], f[1], f[2], f[3]);
                         dmScript::PushQuat(L, Vectormath::Aos::Quat(f[0], f[1], f[2], f[3]));
                         buffer += sizeof(float) * 4;
                         CHECK_PUSHTABLE_OOB("udata quat", logger, buffer, buffer_end, count, depth);
@@ -808,6 +917,8 @@ namespace dmScript
                         for (uint32_t i = 0; i < 4; ++i)
                             for (uint32_t j = 0; j < 4; ++j)
                                 m.setElem(i, j, f[i * 4 + j]);
+
+                        ScriptTableDebug_PrintMatrix4(f);
                         dmScript::PushMatrix4(L, m);
                         buffer += sizeof(float) * 16;
                         CHECK_PUSHTABLE_OOB("udata mat4", logger, buffer, buffer_end, count, depth);
@@ -819,6 +930,7 @@ namespace dmScript
                         dmhash_t hash;
                         uint32_t hash_size = sizeof(dmhash_t);
                         memcpy(&hash, buffer, hash_size);
+                        ScriptTableDebug_PrintHash(hash);
                         dmScript::PushHash(L, hash);
                         buffer += hash_size;
                         CHECK_PUSHTABLE_OOB("udata hash", logger, buffer, buffer_end, count, depth);
@@ -830,6 +942,7 @@ namespace dmScript
                         dmMessage::URL url;
                         uint32_t url_size = sizeof(dmMessage::URL);
                         memcpy(&url, buffer, url_size);
+                        ScriptTableDebug_PrintUrl(&url);
                         dmScript::PushURL(L, url);
                         buffer += url_size;
                         CHECK_PUSHTABLE_OOB("udata url", logger, buffer, buffer_end, count, depth);
@@ -855,11 +968,15 @@ namespace dmScript
             lua_settable(L, -3);
 
             CHECK_PUSHTABLE_OOB("loop end", logger, buffer, buffer_end, count, depth);
+
+            ScriptTableDebug_EndValue();
         }
 
         assert(top + 1 == lua_gettop(L));
 
         PushTableLogString(logger, "}");
+        ScriptTableDebug_EndTable();
+
         return buffer - buffer_start;
     }
 
@@ -895,3 +1012,116 @@ namespace dmScript
     }
 
 }
+
+#if defined(DM_DEBUG_SCRIPT_TABLE)
+
+static void ScriptTableDebug_Start()
+{
+    g_ScriptTableDebugVars.m_Level = 0;
+}
+static void ScriptTableDebug_Indent()
+{
+    g_ScriptTableDebugVars.m_Level++;   
+}
+static void ScriptTableDebug_Unindent()
+{
+    g_ScriptTableDebugVars.m_Level--;
+}
+static void ScriptTableDebug_PrintIndent()
+{
+    for (int i = 0; i < g_ScriptTableDebugVars.m_Level; ++i)
+    {
+        printf("    ");
+    }
+}
+static void ScriptTableDebug_PrintNewLine()
+{
+    printf("\n");
+}
+static void ScriptTableDebug_PrintString(const char* s)
+{
+    printf("%s", s);
+}
+
+static void ScriptTableDebug_PrintString(const char* s, int len)
+{
+    for (int i = 0; i < len; ++i)
+    {
+        printf("%c", s[i]);
+    }
+}
+static void ScriptTableDebug_PrintBool(bool n)
+{
+    printf("%d (bool)", n ? 1 : 0);
+}
+static void ScriptTableDebug_PrintNumber(double n)
+{
+    printf("%f", n);
+}
+static void ScriptTableDebug_PrintHash(dmhash_t n)
+{
+    printf("%08llx (hash)", n);   
+}
+static void ScriptTableDebug_PrintUrl(dmMessage::URL* url)
+{
+    printf("0, %08llx, %08llx (url)", url->m_Path, url->m_Fragment);   
+}
+static void ScriptTableDebug_PrintMatrix4(float* f)
+{
+    ScriptTableDebug_PrintNewLine();
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        ScriptTableDebug_PrintIndent();
+        for (uint32_t j = 0; j < 4; ++j)
+        {
+            printf("%f%c", f[i * 4 + j], j<3?',':' ');
+        }
+        ScriptTableDebug_PrintNewLine();
+    }
+}
+static void ScriptTableDebug_PrintVector3(float x, float y, float z)
+{
+    printf("%f, %f, %f", x, y, z);
+}
+static void ScriptTableDebug_PrintVector4(float x, float y, float z, float w)
+{
+    printf("%f, %f, %f, %f", x, y, z, w);
+}
+static void ScriptTableDebug_PrintQuat(float x, float y, float z, float w)
+{
+    printf("%f, %f, %f, %f", x, y, z, w);
+}
+
+
+static void ScriptTableDebug_StartTable()
+{
+    ScriptTableDebug_PrintNewLine();
+    ScriptTableDebug_PrintIndent(); printf("{"); ScriptTableDebug_PrintNewLine();
+    ScriptTableDebug_Indent();
+}
+static void ScriptTableDebug_EndTable()
+{
+    ScriptTableDebug_Unindent();
+    ScriptTableDebug_PrintIndent(); printf("}"); ScriptTableDebug_PrintNewLine();
+}
+
+static void ScriptTableDebug_StartKey()
+{
+    ScriptTableDebug_PrintIndent();
+    printf("KEY= "); fflush(stdout);
+}
+static void ScriptTableDebug_EndKey()
+{
+    printf(":\t");
+}
+
+static void ScriptTableDebug_StartValue()
+{
+    printf("VALUE= "); fflush(stdout);
+}
+static void ScriptTableDebug_EndValue()
+{
+    ScriptTableDebug_PrintNewLine();
+}
+
+#endif

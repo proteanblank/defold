@@ -7,12 +7,14 @@ def configure(conf):
     pass
 
 def build(bld):
+    bld.add_subdirs("tools")
+
     script = bld.new_task_gen(features = 'cxx cc cstaticlib',
-                          includes = '. script',
-                          proto_gen_cc = False,
-                          proto_gen_py = True,
-                          protoc_includes = '. script',
-                          target = 'script')
+                      includes = '. script',
+                      proto_gen_cc = False,
+                      proto_gen_py = True,
+                      protoc_includes = '. script',
+                      target = 'script')
 
     script.find_sources_in_dirs(['script', '.'])
 
@@ -42,6 +44,18 @@ def build(bld):
         script.cxxflags = ['-DLUA_BYTECODE_ENABLE_32']
     if bld.env.LUA_BYTECODE_ENABLE_64 == 'yes':
         script.cxxflags = ['-DLUA_BYTECODE_ENABLE_64']
+
+
+    script_debug = bld.new_task_gen(features = 'cxx cc cstaticlib',
+                          includes = '. script',
+                          proto_gen_cc = False,
+                          proto_gen_py = True,
+                          defines = 'DM_DEBUG_SCRIPT_TABLE',
+                          protoc_includes = '. script',
+                          target = 'script_debug')
+
+    script_debug.install_path = None
+    script_debug.source = script.source
 
     dmsdk_add_files(bld, '${PREFIX}/sdk/include/dmsdk', 'dmsdk')
 
