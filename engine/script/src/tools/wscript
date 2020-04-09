@@ -16,6 +16,6 @@ def build(bld):
         features    = 'cc cxx cprogram',
         uselib      = 'DLIB LUA CARES',
         uselib_local= 'script_debug',
-        includes    = '../build .',
+        includes    = '../build . ..',
         target      = 'savefiledump',
         source      = 'savefiledump.cpp stubs.cpp')
