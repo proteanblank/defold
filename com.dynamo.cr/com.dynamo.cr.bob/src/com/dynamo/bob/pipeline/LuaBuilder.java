@@ -71,6 +71,9 @@ public abstract class LuaBuilder extends Builder<Void> {
 
     public byte[] constructStrippedLuaCode(byte[] byteString) throws IOException, CompileExceptionError {
         String string = new String(byteString, "UTF-8");
+
+        System.out.printf("constructStrippedLuaCode: (UTF-8):\n\"%s\"\n\n", string);
+
         string = LuaScanner.stripProperties(string);
         return string.getBytes();
     }
@@ -91,6 +94,8 @@ public abstract class LuaBuilder extends Builder<Void> {
             fo = new java.io.FileOutputStream(inputFile);
             fo.write(byteString);
             fo.close();
+
+            System.out.printf("constructBytecode: (luajit)\n");
 
             // Doing a bit of custom set up here as the path is required.
             //
@@ -161,8 +166,9 @@ public abstract class LuaBuilder extends Builder<Void> {
             byte tmp[] = new byte[(int) resultBytes];
             rdr.readFully(tmp);
 
-            outputFile.delete();
-            inputFile.delete();
+            //outputFile.delete();
+            //inputFile.delete();
+            System.out.printf("NOTE: Didn't delete files:\nin: %s\nout: %s\n", inputFile, outputFile);
             return tmp;
         }
         finally {
